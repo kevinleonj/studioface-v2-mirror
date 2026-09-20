@@ -27,4 +27,11 @@ export const TURNSTILE_SITEKEY = process.env.NEXT_PUBLIC_TURNSTILE_SITEKEY ?? ""
 export const GA4_ID = process.env.NEXT_PUBLIC_GA4_ID ?? "";
 
 export const PRICE_LABEL = "19,99 €";
+// Same price as PRICE_LABEL, as a number for GA4's `value` parameter (begin_checkout)
+// and for the home page's JSON-LD Product offer (page-head unit).
+export const PRICE_EUR = 19.99;
 export const MAX_FILES = 4;
+
+// The production origin. Used for metadataBase (canonical, og:image resolve against
+// it) and for JSON-LD, which Next's metadata API does not resolve for us.
+export const SITE_URL = "https://studioface.app";

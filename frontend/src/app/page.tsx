@@ -1,10 +1,11 @@
+import type { Metadata } from "next";
 import Script from "next/script";
 import { Faq } from "@/components/faq";
 import { Comparador } from "@/components/comparador";
 import { FoldCta, UPLOADER_ID } from "@/components/fold-cta";
 import { MoreMuestras } from "@/components/more-muestras";
 import { UploadForm } from "@/components/upload-form";
-import { PRICE_LABEL, TURNSTILE_SITEKEY } from "@/lib/config";
+import { PRICE_EUR, PRICE_LABEL, SITE_URL, TURNSTILE_SITEKEY } from "@/lib/config";
 
 /**
  * Landing page — direction B, "Hoja de contactos" (docs/DESIGN.md).
@@ -28,6 +29,75 @@ const STEPS = [
   { title: "Mira la prueba", body: "Generamos una foto de muestra sin coste ni registro." },
   { title: "Recibe las cuatro", body: "Te llegan por correo en unos minutos." },
 ];
+
+// Unit page-head. TITLE and DESCRIPTION feed both <head> metadata and the JSON-LD
+// below, so the three surfaces (tab title, share card, structured data) never drift
+// apart into three different descriptions of the same product.
+const TITLE = "Foto de perfil profesional con IA para LinkedIn y CV | StudioFace";
+// 119 characters: under the 155 SERP truncation point, names the price and the free
+// preview (docs/CONVERSION.md — the proof-before-price hypothesis, restated for a
+// search snippet instead of the fold).
+const DESCRIPTION =
+  "Sube tus selfies y prueba gratis antes de pagar. Recibe tu foto de perfil " +
+  "profesional con IA por 19,99 €, IVA incluido.";
+const SHARE_IMAGE = `${SITE_URL}/share.jpg`;
+
+export const metadata: Metadata = {
+  title: TITLE,
+  description: DESCRIPTION,
+  // metadataBase (root layout) resolves this to https://studioface.app/.
+  alternates: { canonical: "/" },
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    url: "/",
+    siteName: "StudioFace",
+    locale: "es_ES",
+    type: "website",
+    images: [
+      {
+        url: SHARE_IMAGE,
+        width: 1200,
+        height: 630,
+        alt: "Antes y después de una foto de perfil generada con StudioFace",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+    images: [SHARE_IMAGE],
+  },
+};
+
+// Price comes from PRICE_EUR (lib/config.ts), the single existing constant, so the
+// structured data can never disagree with what the checkout page actually charges.
+// No aggregateRating and no FAQPage here, by the brief: neither claim is backed by a
+// real review count or a machine-readable FAQ, and an unbacked one is the kind of rich
+// result Google's own spam policies act on.
+const PRODUCT_LD = {
+  "@context": "https://schema.org",
+  "@type": "Product",
+  name: TITLE,
+  description: DESCRIPTION,
+  image: SHARE_IMAGE,
+  brand: { "@type": "Brand", name: "StudioFace" },
+  offers: {
+    "@type": "Offer",
+    url: SITE_URL,
+    priceCurrency: "EUR",
+    price: PRICE_EUR.toFixed(2),
+    availability: "https://schema.org/InStock",
+  },
+};
+
+const ORGANIZATION_LD = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "StudioFace",
+  url: SITE_URL,
+};
 
 export default function Home() {
   return (
@@ -150,6 +220,20 @@ export default function Home() {
         <h2 className="font-[family-name:var(--font-newsreader)] text-2xl">Más muestras</h2>
         <MoreMuestras />
       </section>
+
+      {/* Placed last, not first: this is invisible structured data, and putting it
+          before the hero moved its serialised price into the raw HTML ahead of the
+          real photograph, which broke tests/test_hero.py's proof-before-price check
+          on text it never meant to read. Position in the DOM does not affect how a
+          crawler reads JSON-LD. */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(PRODUCT_LD) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(ORGANIZATION_LD) }}
+      />
     </>
   );
 }

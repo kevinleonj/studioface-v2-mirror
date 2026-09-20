@@ -134,7 +134,15 @@ def _checkout_factory(s: Settings):
     stripe.api_key = s.stripe_secret_key
 
     def create(
-        batch: str, count: int, style: str, gclid: str | None, wardrobe: str | None = None
+        batch: str,
+        count: int,
+        style: str,
+        gclid: str | None,
+        wardrobe: str | None = None,
+        gbraid: str | None = None,
+        wbraid: str | None = None,
+        ga_client_id: str | None = None,
+        ga_session_id: str | None = None,
     ) -> str:
         if not s.stripe_price_eur:
             # Ships before STRIPE_PRICE_EUR reaches a Cloud Run revision; the route
@@ -156,6 +164,14 @@ def _checkout_factory(s: Settings):
                 "gclid": gclid or "",
                 # The garment the customer picked, never anything about the customer.
                 "wardrobe": wardrobe or "",
+                # Read once at page load (gbraid/wbraid) or at checkout via gtag('get',
+                # ...) (ga_client_id/ga_session_id), and carried through Stripe metadata
+                # because the webhook that turns this session into an Order runs with
+                # no browser in sight. See app/main.py:_order_from_session.
+                "gbraid": gbraid or "",
+                "wbraid": wbraid or "",
+                "ga_client_id": ga_client_id or "",
+                "ga_session_id": ga_session_id or "",
             },
         )
         logger.info("checkout session created batch=%s style=%s sources=%d", batch, style, count)

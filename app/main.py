@@ -170,6 +170,11 @@ REVALIDATE = "no-cache"
 # filename across a replacement and must never be pinned for a year.
 HASHED_PREFIX = "/_next/static/"
 IMMUTABLE = "public, max-age=31536000, immutable"
+# /muestras/* and the share image: no hash in the filename, so not immutable, but a
+# crawler fetches og:image once and a search engine re-crawls on its own schedule, so
+# a full day of caching is free bandwidth (page-head unit).
+ONE_DAY = "public, max-age=86400"
+DAY_CACHED_PREFIXES = ("/muestras/", "/share.jpg")
 
 
 class CachedStatic(StaticFiles):
@@ -178,10 +183,22 @@ class CachedStatic(StaticFiles):
     def file_response(self, *args, **kwargs):  # type: ignore[override]
         response = super().file_response(*args, **kwargs)
         path = args[2].get("path", "") if len(args) > 2 else ""
+        if not path.startswith("/"):
+            path = f"/{path}"
         prefix = HASHED_PREFIX.strip("/")
-        hashed = path.startswith(prefix) or path.startswith(f"/{prefix}")
-        response.headers["cache-control"] = IMMUTABLE if hashed else REVALIDATE
+        if path.startswith(f"/{prefix}"):
+            response.headers["cache-control"] = IMMUTABLE
+        elif path.startswith(DAY_CACHED_PREFIXES):
+            response.headers["cache-control"] = ONE_DAY
+        else:
+            response.headers["cache-control"] = REVALIDATE
         return response
+
+
+# batch, count, style, gclid, wardrobe, gbraid, wbraid, ga_client_id, ga_session_id -> url
+CreateCheckout = Callable[
+    [str, int, str, str | None, str | None, str | None, str | None, str | None, str | None], str
+]
 
 
 @dataclass
@@ -201,7 +218,7 @@ class Deps:
     # unwired or broken Stripe client CLOSES /api/gracias rather than opening it.
     retrieve_session: Callable[[str], dict | None] = lambda session_id: None
     sign_url: Callable[[str], str] = lambda url: url
-    create_checkout: Callable[[str, int, str, str | None, str | None], str] | None = None
+    create_checkout: CreateCheckout | None = None
     # Where this deployment's gallery lives. A constant until 20 September, when the
     # paid walk redirected a browser off loopback to the production gallery holding an
     # order that existed only locally (tests/test_after_payment.py).
@@ -219,7 +236,7 @@ def make_app(
     verify_pubsub: Callable[[str], bool] = lambda authorization: False,
     retrieve_session: Callable[[str], dict | None] = lambda session_id: None,
     sign_url: Callable[..., str] = lambda url, filename=None: url,
-    create_checkout: Callable[[str, int, str, str | None, str | None], str] | None = None,
+    create_checkout: CreateCheckout | None = None,
     static_dir: str | None = None,
     gallery_base: str = GALLERY_BASE,
     # F8. Fail closed: a composition root that forgets this flag gets no published
@@ -343,7 +360,17 @@ def _register_checkout(app: FastAPI, d: Deps) -> None:
         if wardrobe is not None and wardrobe not in WARDROBES:
             raise HTTPException(422, "unknown_wardrobe")
         try:
-            url = d.create_checkout(batch, count, style, body.get("gclid") or None, wardrobe)
+            url = d.create_checkout(
+                batch,
+                count,
+                style,
+                body.get("gclid") or None,
+                wardrobe,
+                body.get("gbraid") or None,
+                body.get("wbraid") or None,
+                body.get("ga_client_id") or None,
+                body.get("ga_session_id") or None,
+            )
         except RuntimeError as e:
             raise HTTPException(503, str(e)) from e
         return {"url": url}
@@ -665,4 +692,12 @@ def _order_from_session(s: dict) -> Order:
         wardrobe=meta.get("wardrobe") or None,
         amount_cents=int(s["amount_total"]),
         gclid=meta.get("gclid") or None,
+        gbraid=meta.get("gbraid") or None,
+        wbraid=meta.get("wbraid") or None,
+        ga_client_id=meta.get("ga_client_id") or None,
+        ga_session_id=meta.get("ga_session_id") or None,
+        # Real Stripe sessions carry a string PaymentIntent id in "payment_intent" for
+        # mode=payment; absent for no_payment_required. Ga4Purchase falls back when
+        # this is None rather than ever reusing s["id"], the gallery's own order id.
+        payment_intent=s.get("payment_intent") or None,
     )

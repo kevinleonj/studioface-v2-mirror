@@ -184,6 +184,7 @@ def test_tests_that_scan_product_source_strip_comments_first():
         "test_header.py",
         "test_demo_assets.py",
         "test_footer_links.py",
+        "test_seo.py",
         "test_legal_identity.py",
         "test_contrast.py",
     }

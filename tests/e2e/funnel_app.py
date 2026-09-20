@@ -146,7 +146,17 @@ def _enqueue_local(base: str, tasks: str):
 def _checkout(base: str):
     import stripe
 
-    def create(batch, count, style, gclid, wardrobe=None) -> str:
+    def create(
+        batch,
+        count,
+        style,
+        gclid,
+        wardrobe=None,
+        gbraid=None,
+        wbraid=None,
+        ga_client_id=None,
+        ga_session_id=None,
+    ) -> str:
         session = stripe.checkout.Session.create(
             mode="payment",
             line_items=[
@@ -168,6 +178,10 @@ def _checkout(base: str):
                 "style": style,
                 "gclid": gclid or "",
                 "wardrobe": wardrobe or "",
+                "gbraid": gbraid or "",
+                "wbraid": wbraid or "",
+                "ga_client_id": ga_client_id or "",
+                "ga_session_id": ga_session_id or "",
             },
         )
         return session.url

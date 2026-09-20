@@ -24,10 +24,12 @@ The policy:
   - `_next/static/**` -> `public, max-age=31536000, immutable`. Next names those files
     with a SHA of their contents, so the URL changes whenever the bytes do and the
     response never needs revalidating.
-
-Deliberately NOT immutable: /muestras/*. Those filenames carry no hash — replacing a
-demo pair keeps the same URL — so they revalidate like the HTML. Etag makes that cheap
-and it means a corrected photograph is never a day late.
+  - `/muestras/*` and the share image (`/share.jpg`) -> `public, max-age=86400`.
+    Page-head unit: a crawler fetches og:image once and a search engine re-crawls the
+    page on its own schedule, so a full day of caching is free bandwidth. Deliberately
+    NOT immutable, unlike the hashed assets: these filenames carry no hash — replacing
+    a demo pair or the share image keeps the same URL — so a correction is never more
+    than a day late instead of pinned for a year.
 """
 
 import sys
@@ -39,7 +41,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.core import OrderStore, Pipeline  # noqa: E402
 from app.guards import MemoryCounter, RateLimiter  # noqa: E402
-from app.main import HASHED_PREFIX, IMMUTABLE, REVALIDATE, make_app  # noqa: E402
+from app.main import HASHED_PREFIX, IMMUTABLE, ONE_DAY, REVALIDATE, make_app  # noqa: E402
 
 
 @pytest.fixture
@@ -51,6 +53,7 @@ def client(tmp_path):
     muestras = tmp_path / "muestras"
     muestras.mkdir()
     (muestras / "mujer-40-antes.webp").write_bytes(b"RIFF0000WEBP")
+    (tmp_path / "share.jpg").write_bytes(b"\xff\xd8\xff\xd9")
     store = OrderStore()
     pipeline = Pipeline(
         store=store,
@@ -95,14 +98,28 @@ def test_unhashed_assets_are_not_marked_immutable(client):
     year with no way to evict it."""
     r = client.get("/muestras/mujer-40-antes.webp")
     assert r.status_code == 200
-    assert r.headers.get("cache-control") == REVALIDATE
+    assert r.headers.get("cache-control") == ONE_DAY
     assert "immutable" not in r.headers["cache-control"]
+
+
+def test_the_share_image_gets_a_one_day_cache_too(client):
+    """A crawler fetches og:image once; a full day of caching is free bandwidth, and
+    the filename carries no hash so a corrected image is never pinned for a year."""
+    r = client.get("/share.jpg")
+    assert r.status_code == 200
+    assert r.headers.get("cache-control") == ONE_DAY
 
 
 def test_every_static_response_says_something_about_caching(client):
     """Silence is the bug. A response with only etag and last-modified hands the
     decision to RFC 9111 heuristics."""
-    for path in ("/", "/_next/static/chunks/abc123.js", "/muestras/mujer-40-antes.webp"):
+    paths = (
+        "/",
+        "/_next/static/chunks/abc123.js",
+        "/muestras/mujer-40-antes.webp",
+        "/share.jpg",
+    )
+    for path in paths:
         assert client.get(path).headers.get("cache-control"), f"{path} sets no cache-control"
 
 

@@ -1481,3 +1481,261 @@ path contradiction, and the two things Google still does not document.
   branch per task and the runner does not enforce it.
 - `scripts/queue_runner.py` has no memory ceiling and no resume marker. A reaped
   run loses the in-flight task's work; only the `work/done/` moves survive.
+
+**Refreshing the public mirror:** rerun `scripts/make_public_mirror.py` into a NEW empty
+folder, delete `.github/` from it, `git init` and make one commit, then force-push that
+single commit to `kevinleonj/studioface-v2-mirror` only — never to this repository, which
+stays private.
+
+## 2026-09-20 (Claude Code) — task 03: the sale is tied to the visit and the ad click
+
+`work/queue/03-sale-to-visit.md` was killed after its research phase on the earlier
+queue run; its nine Measurement Protocol facts were already in `docs/verified.md`
+(commit `5c05d15`). This session did the code.
+
+**What changed.**
+- `frontend/src/lib/track.ts`: `gclid`/`gbraid`/`wbraid` read once, at module load,
+  into a plain in-memory variable (`clickIds`) — no `localStorage`, no cookie, so
+  "no storage before consent" holds because there is no storage of these at all.
+  `ga4Identifiers()` asks the already-running tag for GA4's visitor and visit numbers
+  with `gtag('get', 'G-NLP25TBTRJ', 'client_id' / 'session_id', callback)`, bounded to
+  1s since Google does not document the callback as always firing. `checkoutClick`
+  renamed to `beginCheckout` ("begin_checkout").
+- `frontend/src/components/upload-form.tsx`: fires `begin_checkout` with
+  `value: 19.99, currency: "EUR"`; awaits `ga4Identifiers()` and sends all five ids
+  (`gclid`, `gbraid`, `wbraid`, `ga_client_id`, `ga_session_id`) to `/api/checkout`.
+- `app/core.py`: `Order` gained `gbraid`, `wbraid`, `ga_client_id`, `ga_session_id`,
+  `payment_intent`.
+- `app/main.py`: `/api/checkout` reads and forwards the four new fields;
+  `_order_from_session` reads them (plus `payment_intent`) back off the Stripe
+  session into the `Order` the webhook creates.
+- `app/entry.py`: `_checkout_factory` accepts and stores all four in Stripe metadata.
+- `app/adapters/ga4.py`: `Ga4Purchase` now prefers `order.ga_client_id` as the MP
+  `client_id` (falls back to the old derived id when the browser reported none),
+  sends `order.ga_session_id` as the `session_id` event param when present, and
+  computes `transaction_id` from Stripe's PaymentIntent — never `order.id`, which is
+  the same id already sitting in the customer's `/g/` gallery link and delivery email.
+  No `consent` object is sent (researched this session, see below).
+- `docs/CONVERSION.md`: renamed the row, added a "Tying the sale to the visit and the
+  ad click" section with the full reasoning above.
+- `docs/verified.md`: MP-6 through MP-6d (researcher: Google does not recommend or
+  require a `consent` object on a server-sent MP event — omitting it is the documented
+  default path), MP-7 (the debug endpoint does NOT enforce a named event's own
+  "Required" fields — found by deleting `transaction_id` from a control payload and
+  still getting a clean response) and MP-8 (the exact payload `Ga4Purchase` builds,
+  validated clean).
+
+**Evidence.**
+- New/changed tests: `tests/test_ga4.py` (transaction id is never the gallery order
+  id, falls back when Stripe reports no PaymentIntent, client_id prefers the browser's,
+  session_id sent only when present) and `tests/test_checkout.py` (all four new fields
+  pass through to `create_checkout`). `.venv\Scripts\python.exe -m pytest -q`:
+  692 passed, 15 skipped (e2e needs `RUN_FUNNEL=1` + a live server, none started).
+- `.venv\Scripts\python.exe scripts\ci.py`: green (ruff check, ruff format, pytest,
+  workflow lint, frontend build, design audit all mirrored; docker build skipped,
+  Docker is not on this machine).
+- Bundle check (`frontend/out/_next/static/chunks/*.js` after `npm run build`):
+  contains `begin_checkout`, `gbraid`, `wbraid`, `client_id`, `session_id`; contains
+  no `"checkout_click"` — the exact set `scripts/check.py attribution` looks for.
+- GA4 debug endpoint (`https://www.google-analytics.com/debug/mp/collect`, placeholder
+  `api_secret`, per docs/verified.md MP-3): the real payload `Ga4Purchase` builds for
+  an order carrying a PaymentIntent and both GA4 numbers returned
+  `{"validationMessages": []}`. A negative control (deleted `transaction_id`) also
+  came back clean, which is MP-7 — the debug endpoint checks structure, not a named
+  event's required fields, so it does not replace `tests/test_ga4.py`.
+
+**Not done, deliberately.** `work/queue/03-sale-to-visit.md` was not moved to
+`work/done/` in this session's commit, to avoid a second push-triggered Cloud Run
+deploy for a bookkeeping-only change (deploy.yml has no `paths-ignore`, so every push
+to main runs the whole pipeline). Move it once this entry's evidence is accepted:
+`git mv work/queue/03-sale-to-visit.md work/done/` and a `chore:` commit, matching the
+pattern of `033f5b2` / `2364ec2`.
+
+**Follow-ups.**
+- `gclid`/`gbraid`/`wbraid` are stored on the order but not sent anywhere yet — a
+  future Google Ads offline-conversion import (Data Manager API, docs/verified.md Gh)
+  is the documented destination for them, not this task.
+- MP-2b documents a 24-hour (session attribution) / same-business-day (User-ID)
+  window for joining a server event to a browser session by `session_id`. Nothing
+  enforces that window today: an order that sits in `generating` for longer than that
+  (LEASE_SECONDS is 600s, so unlikely, but not impossible under repeated Cloud Tasks
+  retries) would still send whatever `ga_session_id` it captured at checkout, now
+  outside Google's documented join window. Not fixed here; flagging for whoever next
+  reads GA4's server-session numbers and finds them inconsistent.
+
+## 2026-09-20 (Claude Code) — task 05: robots.txt and sitemap.xml
+
+`scripts/check.py robots` and `scripts/check.py sitemap` measured production red
+before this task: no `/robots.txt`, no `/sitemap.xml`.
+
+**What changed.**
+- `frontend/src/app/robots.ts` (new): Next.js file-convention route, `export const
+  dynamic = 'force-static'` (required on Next.js 16.3.5 — confirmed by trying the
+  build without it first, which failed the static export). Allows `/`, disallows
+  `/g/`, `/api/`, `/internal/`, `/recuperar/`, and states `Sitemap:
+  https://studioface.app/sitemap.xml`.
+- `frontend/src/app/sitemap.ts` (new): same `force-static` requirement. Lists the
+  home page and the four legal pages (`/legal/aviso-legal/`, `/legal/privacidad/`,
+  `/legal/terminos/`, `/legal/cookies/`).
+- `app/main.py`: no change needed. The `StaticFiles` mount was already registered
+  last ("so /api, /internal and /health win"), so any file the export produces at
+  its root — including these two — is already served with no shadowing to fix.
+- `tests/test_seo.py` (new): asserts against the real `frontend/out` export (skipped
+  if it does not exist, same convention as `tests/test_footer_links.py`) that both
+  files exist with the right content, and separately builds the FastAPI app with
+  `static_dir=frontend/out` and proves `GET /robots.txt` and `GET /sitemap.xml`
+  both return 200 through `TestClient`.
+- `tests/test_source_scanners.py`: added `test_seo.py` to the exemption list for the
+  raw-source-scan rule, same reason already recorded there for `test_footer_links.py`
+  — it reads a built artefact, not product source carrying our own comments.
+
+**Evidence.**
+- Before: `.venv\Scripts\python.exe -m pytest tests/test_seo.py -v` — 6 failed (no
+  `frontend/out/robots.txt`, no `frontend/out/sitemap.xml`, and the FastAPI app
+  answered 404 for both).
+- After: `.venv\Scripts\python.exe -m pytest tests/test_seo.py -v` — 6 passed.
+- `.venv\Scripts\python.exe scripts\ci.py`: `CI MIRROR GATE: green in 42s` (703
+  passed, 15 skipped).
+- `.venv\Scripts\python.exe scripts\check.py robots`: GREEN, exit 0.
+- `.venv\Scripts\python.exe scripts\check.py sitemap`: GREEN, exit 0.
+- Deployed via GitOps (`git push origin main`, commit `47a2a8a`): GitHub Actions run
+  `35517711576` (`emulator`, `ci`, `design`, `infra`, `deploy` all green, including
+  "verify production from outside" and "lighthouse"). Cloud Run revision
+  `studioface-api-00110-4wg`, serving 100% of traffic.
+
+**Not done, deliberately.** `work/queue/05-robots-sitemap.md` was left in place —
+moving it to `work/done/` was not part of this task's brief and the two renames
+already staged for tasks 03/04 were left untouched per instruction, so this task
+added no third rename to that same commit-in-waiting.
+
+**Follow-ups.** None. Both `scripts/check.py robots` and `scripts/check.py sitemap`
+are green against production; nothing deferred.
+
+## 2026-09-20 (Claude Code) — task 06: the home page's <head>
+
+`scripts/check.py head` measured production red before this task: no canonical link,
+no `og:image`, no JSON-LD carrying the price.
+
+**What changed.**
+- `frontend/src/lib/config.ts`: added `SITE_URL = "https://studioface.app"`, the one
+  place `metadataBase` and the JSON-LD's absolute URLs now come from, next to the
+  existing `PRICE_EUR` this task reads for the JSON-LD offer price (no second
+  hard-coded "19.99").
+- `frontend/src/app/layout.tsx`: `metadata.metadataBase = new URL(SITE_URL)`, so every
+  page's relative `og:image` and canonical resolve to an absolute
+  `https://studioface.app/...` address — required by the Open Graph protocol.
+- `frontend/src/app/page.tsx`: `export const metadata` with the exact title
+  `Foto de perfil profesional con IA para LinkedIn y CV | StudioFace`, a 119-character
+  description naming the price and the free preview, `alternates.canonical: "/"`,
+  Open Graph (type website, es_ES, the share image at 1200x630) and a Twitter
+  `summary_large_image` card. Two `application/ld+json` `<script>` tags — Product
+  (offer price `PRICE_EUR.toFixed(2)`, EUR, InStock) and Organization — placed AFTER
+  the visible sections rather than before them: putting them first serialised the
+  price into the raw HTML ahead of the real hero photograph and broke
+  `tests/test_hero.py`'s proof-before-price check, which reads the DOM as text and had
+  no way to know a `<script type="application/ld+json">` block is invisible to a
+  visitor. No `aggregateRating`, no `FAQPage` — neither is backed by a real review
+  count or a machine-readable FAQ, and an unbacked one is what Google's rich-result
+  spam policies act on. By the brief.
+- `scripts/make_share_image.py` (new): Pillow (already a dependency —
+  `scripts/align_muestras.py` uses it too, so no new one is added). Center-crops the
+  two files `scripts/align_muestras.py` already cuts
+  (`frontend/public/muestras/mujer-40-{antes,despues}-hero.jpg`) to 600x630 each,
+  pastes them side by side into a 1200x630 canvas, and steps JPEG quality down until
+  the file is under 200 KB. Generates nothing and calls no model, same rule as the
+  script it reads from. Output committed at `frontend/public/share.jpg` (101,729
+  bytes) rather than built at deploy time: this is a static export with
+  `images.unoptimized`, so there is no image server to regenerate it from, and
+  `og:image` needs one fixed URL a crawler fetches once.
+- `app/main.py`: `CachedStatic` gained a third tier. `ONE_DAY = "public,
+  max-age=86400"` for `/muestras/*` and `/share.jpg` — no hash in either filename, so
+  not `IMMUTABLE` like `_next/static/**`, but a crawler fetches `og:image` once and a
+  search engine re-crawls the page on its own schedule, so a full day of caching is
+  free bandwidth. Previously both fell through to `REVALIDATE` (`no-cache`).
+
+**Evidence.**
+- Before: `.venv\Scripts\python.exe -m pytest tests/test_page_head.py
+  tests/test_share_image.py -v` — collection error (no `scripts/make_share_image.py`)
+  then, once the module existed but before the metadata/JSON-LD landed, 8 of 9
+  `test_page_head.py` cases failed (title, description, canonical, og:image, twitter,
+  Product, Organization, the check.py regex) against the already-built export.
+- After: both files green — `12 passed` (`test_share_image.py` + the pre-existing
+  cache-policy suite, now asserting `ONE_DAY` instead of `REVALIDATE` for `/muestras/*`
+  and a new case for `/share.jpg`) and `9 passed` (`test_page_head.py`).
+- Full suite: `.venv\Scripts\python.exe -m pytest -q` — `718 passed, 15 skipped`.
+- `.venv\Scripts\python.exe scripts\ci.py` — `CI MIRROR GATE: green in 53s`, `DESIGN
+  AUDIT: 0 P0, 0 P1, 0 P2 PASS`, `WORKFLOW LINT: ok`.
+- Local mobile Lighthouse (performance only, `scripts/demo_server.py` serving the real
+  app + this export, `npx lighthouse --form-factor=mobile --throttling-method=simulate
+  --chrome-flags="--headless=new"`): three runs, 84 / 95 / 88 — noisy on this machine
+  under `simulate` throttling (CLS held at 1.0/0 every run; LCP and TBT swung with
+  background load, not with anything this task changed — `og:image` is a `<meta>`
+  reference, not a resource the browser fetches on page load). No fixed regression to
+  chase; recorded honestly rather than cherry-picked.
+- `scripts/check.py head`, run locally against the exact regex it uses:
+  `canonical link True`, `share image True`, `product data with the price True`.
+  Production verification is the pending step below.
+
+**Not done, deliberately.** `work/queue/06-page-head.md` was left in place, same
+reasoning as task 05: moving it was not part of the brief, and the three renames
+already staged for tasks 03/04/05 were left untouched per instruction.
+
+**Follow-ups.**
+- `scripts/check.py head` still needs to be run against production after this deploys
+  — recorded below once the run finishes.
+- Local Lighthouse variance (84-95) is worth a second look with the machine otherwise
+  idle, though nothing in this task's diff should move LCP or TBT.
+
+## 2026-09-20 (Claude Code) — task 07: logs
+
+`app/entry.py`'s `build()` already called `configure_logging()` (fixed in `5d781f6` /
+`2d9f21a`, before this task existed). This task adds the test that proves the wiring at
+the composition root rather than only at the unit, and the production evidence that the
+deployed container actually speaks JSON to stdout.
+
+**What changed.**
+- `tests/test_logging_configured.py` (new): builds the app through `app.entry.build()`
+  with only its network boundaries faked (reuses the `built` fixture from
+  `tests/test_entry_builds.py` — CLAUDE.md lesson 8, "production wiring counts" —
+  instead of declaring the same Firestore/Storage/Stripe/Resend doubles a second time).
+  Asserts the root logger carries the JSON-formatted handler `app/logs.py` installs
+  (not just "any handler": pytest's own log-capture plugin attaches one to the root
+  logger for every test regardless of the application, so that check alone would have
+  passed even with `configure_logging()` never called — caught by temporarily disabling
+  the call and watching the test fail, see below) and that its level is INFO or lower.
+- `docs/audit/logs-2026-09-20.md` (new): one GET to `https://studioface.app/health`
+  (read-only, no state change, no email) and the matching production log lines, found
+  by `x-cloud-trace-context` and by timestamp.
+
+**Evidence.**
+- Red demonstration (`app/entry.py`'s `configure_logging()` call temporarily replaced
+  with `pass`, then reverted — `git diff --stat app/entry.py` shows zero diff
+  afterwards): `.venv\Scripts\python.exe -m pytest tests/test_logging_configured.py -v`
+  — `2 failed` (`AssertionError: no JSON-formatted handler on the root logger after
+  build()` and `AssertionError: root logger level 30 drops INFO lines`).
+- After reverting: `.venv\Scripts\python.exe -m pytest tests/test_logging_configured.py -q`
+  — `2 passed in 1.24s`.
+- `.venv\Scripts\python.exe scripts\ci.py`: `CI MIRROR GATE: green in 45s` (720 passed,
+  15 skipped).
+- Production: `curl -s -i https://studioface.app/health` returned `200`,
+  `x-cloud-trace-context: e0e5ddaeb0b036730769302ab70a7092`. The application's own
+  stdout line for that same request (`gcloud logging read` on
+  `run.googleapis.com/stdout`, `studioface-api`, `europe-west1`,
+  `studio-face-fresh-start`): `jsonPayload.logger = "uvicorn.access"`,
+  `jsonPayload.message = "169.254.169.126:47512 - \"GET /health HTTP/1.1\" 200"`,
+  `severity = "INFO"`, timestamp 55ms after the request — revision
+  `studioface-api-00111-9kx`. Cloud Run's separate platform request log for the same
+  request (matched by `trace`) corroborates but is not itself evidence of application
+  logging; both are pasted in full in `docs/audit/logs-2026-09-20.md`.
+- `gcloud.cmd` from Git Bash failed on this command with `'C:\Program' is not
+  recognized` (a known quoting problem invoking a `.cmd` with a space in its install
+  path from MSYS bash) — ran the same `gcloud logging read` / `gcloud config
+  get-value` commands from PowerShell instead, which worked cleanly. Noting this so
+  the next agent does not waste time on the same bash failure.
+
+**Not verified.** `/health`'s own route handler does not call `logger.info` (see
+`app/main.py`) — the application-level line captured is uvicorn's access log, passed
+through rather than suppressed by `configure_logging()`. That a *route's own*
+`logger.info` reaches Cloud Run in production (as opposed to uvicorn's access log) was
+not separately re-proven against production in this task; `tests/test_logging.py`
+proves it at the unit level and was already green before this task.

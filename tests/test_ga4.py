@@ -69,14 +69,14 @@ def test_the_outbound_call_has_an_explicit_timeout():
 # ---------------------------------------------------------------- the payload
 
 
-def test_one_purchase_event_with_the_order_id_as_transaction_id():
+def test_exactly_one_purchase_event_carrying_a_transaction_id():
     track, http = tracker()
     track(an_order())
     body = http.calls[0]["json"]
     assert len(body["events"]) == 1
     event = body["events"][0]
     assert event["name"] == "purchase"
-    assert event["params"]["transaction_id"] == "cs_test_a1b2"
+    assert event["params"]["transaction_id"]
 
 
 def test_value_is_euros_as_a_number_not_cents_and_not_a_string():
@@ -114,6 +114,66 @@ def test_different_orders_get_different_client_ids():
     track(an_order(id="cs_1"))
     track(an_order(id="cs_2"))
     assert http.calls[0]["json"]["client_id"] != http.calls[1]["json"]["client_id"]
+
+
+# ------------------------------------------------------- tying the sale to the visit
+
+
+def test_transaction_id_is_never_the_gallery_order_id():
+    """The gallery link (/g/?o=<order.id>) and the delivery email both carry order.id
+    verbatim. Reusing it as the GA4 transaction_id would file the sale in Ads under an
+    id anyone who ever saw that link also holds."""
+    track, http = tracker()
+    track(an_order(id="cs_test_a1b2", payment_intent="pi_realmoney"))
+    txn = http.calls[0]["json"]["events"][0]["params"]["transaction_id"]
+    assert txn != "cs_test_a1b2"
+    assert txn == "pi_realmoney"
+
+
+def test_transaction_id_falls_back_when_stripe_reported_no_payment_intent():
+    """no_payment_required orders (a 100%-off coupon) have no PaymentIntent. The
+    fallback still must not be the gallery order id, and must be stable so a Cloud
+    Tasks retry of the same order reports the same transaction twice, not two sales."""
+    track, http = tracker()
+    track(an_order(id="cs_test_free", payment_intent=None))
+    track(an_order(id="cs_test_free", payment_intent=None))
+    first, second = (c["json"]["events"][0]["params"]["transaction_id"] for c in http.calls)
+    assert first == second
+    assert first != "cs_test_free"
+
+
+def test_the_visitor_number_is_used_as_client_id_when_the_browser_reported_one():
+    """order.ga_client_id is what gtag('get', ..., 'client_id') read in the browser
+    that actually bought — using it instead of the server-derived id joins this
+    purchase to the SAME visit GA4 already has, rather than inventing a new visitor."""
+    track, http = tracker()
+    track(an_order(ga_client_id="1122334455.6677889900"))
+    assert http.calls[0]["json"]["client_id"] == "1122334455.6677889900"
+
+
+def test_client_id_falls_back_to_the_derived_one_when_the_browser_reported_none():
+    """gtag('get', ..., 'client_id') can come back undefined (docs/verified.md
+    MP-5b) — an order placed with JavaScript blocked must still report a client_id,
+    since a web stream MP event requires one."""
+    track, http = tracker()
+    track(an_order(ga_client_id=None))
+    assert http.calls[0]["json"]["client_id"]
+
+
+def test_the_visit_number_is_sent_as_the_session_id_event_param_when_present():
+    """MP-2: session_id is an EVENT PARAM, not a top-level field."""
+    track, http = tracker()
+    track(an_order(ga_session_id="1758300000"))
+    params = http.calls[0]["json"]["events"][0]["params"]
+    assert params["session_id"] == "1758300000"
+
+
+def test_no_session_id_param_when_the_browser_never_reported_one():
+    """MP-5b: never send a value we do not have."""
+    track, http = tracker()
+    track(an_order(ga_session_id=None))
+    params = http.calls[0]["json"]["events"][0]["params"]
+    assert "session_id" not in params
 
 
 # ---------------------------------------------------------------- when NOT to send

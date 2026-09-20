@@ -26,8 +26,21 @@ class FakeCheckout:
     def __init__(self, error=None):
         self.calls, self.error = [], error
 
-    def __call__(self, batch, count, style, gclid, wardrobe=None):
-        self.calls.append((batch, count, style, gclid, wardrobe))
+    def __call__(
+        self,
+        batch,
+        count,
+        style,
+        gclid,
+        wardrobe=None,
+        gbraid=None,
+        wbraid=None,
+        ga_client_id=None,
+        ga_session_id=None,
+    ):
+        self.calls.append(
+            (batch, count, style, gclid, wardrobe, gbraid, wbraid, ga_client_id, ga_session_id)
+        )
         if self.error:
             raise self.error
         return f"https://checkout.stripe.com/c/pay/{batch}"
@@ -98,7 +111,7 @@ def test_checkout_returns_the_stripe_url():
     r = c.post("/api/checkout", json={"batch": h["batch"], "n": h["n"], "t": h["t"]})
     assert r.status_code == 200
     assert r.json() == {"url": f"https://checkout.stripe.com/c/pay/{h['batch']}"}
-    assert ck.calls == [(h["batch"], 1, "corporativo", None, None)]
+    assert ck.calls == [(h["batch"], 1, "corporativo", None, None, None, None, None, None)]
 
 
 def test_style_and_gclid_are_passed_through():
@@ -108,7 +121,29 @@ def test_style_and_gclid_are_passed_through():
         "/api/checkout",
         json={"batch": h["batch"], "n": h["n"], "t": h["t"], "style": "linkedin", "gclid": "g99"},
     )
-    assert ck.calls == [(h["batch"], 1, "linkedin", "g99", None)]
+    assert ck.calls == [(h["batch"], 1, "linkedin", "g99", None, None, None, None, None)]
+
+
+def test_the_other_four_attribution_ids_are_passed_through():
+    """Google Ads splits click ids across gclid/gbraid/wbraid, and GA4's own visitor
+    and visit numbers are read separately with gtag('get', ...). All four have to
+    reach create_checkout alongside gclid, or the sale cannot be tied to the click
+    or the visit that made it."""
+    c, ck = build()
+    h = a_preview(c)
+    c.post(
+        "/api/checkout",
+        json={
+            "batch": h["batch"],
+            "n": h["n"],
+            "t": h["t"],
+            "gbraid": "gb1",
+            "wbraid": "wb1",
+            "ga_client_id": "111.222",
+            "ga_session_id": "333",
+        },
+    )
+    assert ck.calls == [(h["batch"], 1, "corporativo", None, None, "gb1", "wb1", "111.222", "333")]
 
 
 # ---------------------------------------------------------------- failure
@@ -152,7 +187,9 @@ def test_the_chosen_wardrobe_is_passed_through():
         "/api/checkout",
         json={"batch": h["batch"], "n": h["n"], "t": h["t"], "wardrobe": "blusa-sastre"},
     )
-    assert ck.calls == [(h["batch"], 1, "corporativo", None, "blusa-sastre")]
+    assert ck.calls == [
+        (h["batch"], 1, "corporativo", None, "blusa-sastre", None, None, None, None)
+    ]
 
 
 def test_an_unknown_wardrobe_is_refused_before_stripe_is_called():
@@ -212,7 +249,17 @@ def test_checkout_not_configured_returns_503_rather_than_a_500():
 
 
 def _unconfigured():
-    def raise_it(batch, count, style, gclid, wardrobe=None):
+    def raise_it(
+        batch,
+        count,
+        style,
+        gclid,
+        wardrobe=None,
+        gbraid=None,
+        wbraid=None,
+        ga_client_id=None,
+        ga_session_id=None,
+    ):
         raise RuntimeError("checkout_not_configured")
 
     return raise_it

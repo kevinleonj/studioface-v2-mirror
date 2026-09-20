@@ -75,7 +75,28 @@ export default function GalleryPage() {
         // Fired here rather than on the purchase, because this is where the customer
         // actually receives the thing. The server-side `purchase` says the money moved;
         // the gap between the two is the product failing after being paid for.
-        track(EVENTS.orderDelivered, { images: (data.images ?? []).length });
+        //
+        // Guarded per order (never one flag, or delivering order B would look
+        // already-told because order A set it) so a reload — the page itself says
+        // "recarga la pagina para renovarlos" — or reopening the delivery email does
+        // not send a second order_delivered for the same order. Wrapped in try/catch
+        // like consent.tsx: private-mode Safari throws on localStorage access, and a
+        // tracker that throws must not take the poll loop down with it.
+        let alreadyTold = false;
+        try {
+          alreadyTold = window.localStorage.getItem(`sf-delivered-${order}`) === "1";
+        } catch {
+          alreadyTold = false;
+        }
+        if (!alreadyTold) {
+          track(EVENTS.orderDelivered, { images: (data.images ?? []).length });
+          try {
+            window.localStorage.setItem(`sf-delivered-${order}`, "1");
+          } catch {
+            // Private mode: nothing persists, so a reload may fire again. Better than
+            // losing the event outright when storage is unavailable.
+          }
+        }
         return;
       }
       if (data.status === "failed_refunded") {

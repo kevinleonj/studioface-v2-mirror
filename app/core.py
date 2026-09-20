@@ -130,6 +130,21 @@ class Order:
     style: str
     amount_cents: int
     gclid: str | None = None
+    # Google Ads splits click ids across three parameters depending on the click's
+    # path: gclid (Search/Display), gbraid (app-to-web, iOS), wbraid (web-to-app,
+    # Android). Read once at page load in the browser (frontend/src/lib/track.ts) and
+    # carried through checkout so a future ads import can match this sale to its ad
+    # click by whichever id the click actually produced.
+    gbraid: str | None = None
+    wbraid: str | None = None
+    # GA4's own visitor and visit numbers, read in the browser with
+    # gtag('get', GA4_ID, 'client_id' / 'session_id', callback). Verified on
+    # production (docs/verified.md): both are returned even when cookies are refused
+    # and stay the same across the consent transition. Carrying the real ones lets the
+    # server-sent `purchase` join the SAME visit GA4 already has, instead of the
+    # synthetic id Ga4Purchase derives when neither arrived.
+    ga_client_id: str | None = None
+    ga_session_id: str | None = None
     status: str = "paid"
     outputs: list[str] = field(default_factory=list)
     attempts: int = 0
@@ -142,6 +157,12 @@ class Order:
     # When a worker claimed this order. Read with LEASE_SECONDS to tell a run that is
     # still working from one whose container died.
     started_at: float | None = None
+    # The Stripe PaymentIntent, used ONLY as GA4's transaction_id. order.id is the
+    # Checkout Session id, which is also the gallery's public order id — it sits in
+    # the /g/ link this app puts in the delivery email, so it is not this order's to
+    # spend as an analytics key too. None for a no_payment_required (100%-off) order,
+    # which never gets a PaymentIntent from Stripe.
+    payment_intent: str | None = None
 
 
 class OrderStore:

@@ -11,8 +11,8 @@
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { MAX_FILES, PRICE_LABEL, TURNSTILE_SITEKEY } from "@/lib/config";
-import { EVENTS, track } from "@/lib/track";
+import { MAX_FILES, PRICE_EUR, PRICE_LABEL, TURNSTILE_SITEKEY } from "@/lib/config";
+import { clickIds, EVENTS, ga4Identifiers, track } from "@/lib/track";
 
 type Handle = {
   wardrobe?: string;
@@ -355,8 +355,17 @@ export function UploadForm() {
     setError("");
     // The last click before Stripe owns the session. Anything after this is measured by
     // the server-side `purchase`, so this is the only place the drop-off can be seen.
-    track(EVENTS.checkoutClick, { wardrobe: wardrobe || "por_defecto" });
+    // GA4's own name for this step (docs/verified.md, Gg), with the shape it documents.
+    track(EVENTS.beginCheckout, {
+      value: PRICE_EUR,
+      currency: "EUR",
+      wardrobe: wardrobe || "por_defecto",
+    });
     try {
+      // Google's visitor and visit numbers, read from the tag already on this page.
+      // Bounded (frontend/src/lib/track.ts): checkout must not hang on a callback
+      // Google does not document as always firing.
+      const ga4 = await ga4Identifiers();
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -366,7 +375,11 @@ export function UploadForm() {
           t: handle.t,
           style: "corporativo",
           wardrobe: wardrobe || null,
-          gclid: new URLSearchParams(window.location.search).get("gclid"),
+          gclid: clickIds.gclid,
+          gbraid: clickIds.gbraid,
+          wbraid: clickIds.wbraid,
+          ga_client_id: ga4.client_id,
+          ga_session_id: ga4.session_id,
         }),
       });
       const data = await res.json().catch(() => ({}));

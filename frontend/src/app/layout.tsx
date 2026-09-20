@@ -3,6 +3,7 @@ import { Newsreader, Public_Sans } from "next/font/google";
 import { Analytics, ConsentBanner, ConsentDefaults } from "@/components/consent";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { SITE_URL } from "@/lib/config";
 import "./globals.css";
 
 // docs/DESIGN.md, direction B. TWO families now: Newsreader sets
@@ -21,6 +22,10 @@ const publicSans = Public_Sans({
 });
 
 export const metadata: Metadata = {
+  // Resolves every relative URL in every page's metadata (canonical, og:image) to an
+  // absolute https://studioface.app/... address, which is what a crawler needs — a
+  // relative og:image is undefined behaviour per the Open Graph protocol.
+  metadataBase: new URL(SITE_URL),
   title: "StudioFace — foto de perfil profesional con IA",
   description:
     "Sube tus selfies y recibe cuatro fotos de perfil profesionales en unos minutos. 19,99 € IVA incluido.",

@@ -14,8 +14,10 @@
  * Naming rules verified 2026-09-18 (docs/verified.md): case sensitive, must start with
  * a letter, letters/numbers/underscores only, 40 characters, 25 parameters. None of
  * these may collide with an automatically collected name, which is why the step after
- * checkout is `checkout_click` and not `click`.
+ * checkout is `begin_checkout` and not `click`.
  */
+
+import { GA4_ID } from "@/lib/config";
 
 export const EVENTS = {
   /** The before/after entered the viewport. H1: proof before price. */
@@ -37,8 +39,11 @@ export const EVENTS = {
   previewFailed: "preview_failed",
   /** The first-screen button, or the sticky one. Carries `location`: fold | sticky. */
   ctaClick: "cta_click",
-  /** Checkout was asked for. The last click before Stripe owns the session. H5. */
-  checkoutClick: "checkout_click",
+  /** Checkout was asked for. The last click before Stripe owns the session. H5.
+   *  Renamed from `checkout_click` 2026-09-20: `begin_checkout` is one of GA4's
+   *  documented event names (docs/verified.md, Gg) with a defined value/currency/items
+   *  shape, so ads platforms can build a started-checkout audience from it. */
+  beginCheckout: "begin_checkout",
   /** Somebody landed on /recuperar/ — every one of these is a lost gallery link. H6. */
   recuperarView: "recuperar_view",
   /** The gallery reported four delivered images to the person who bought them. H7. */
@@ -60,4 +65,71 @@ export function track(
   params?: Record<string, string | number>,
 ): void {
   window.gtag?.("event", name, params);
+}
+
+/**
+ * gclid, gbraid and wbraid, read ONCE from the URL when this module first loads (a
+ * page load, since this is a static export with no client-side routing to a second
+ * page) and kept only in this variable. No storage before consent: nothing here
+ * touches localStorage, sessionStorage or a cookie, so there is nothing left to purge
+ * if the visitor never grants one and nothing written before they answer.
+ *
+ * Google Ads splits the click id across three parameters depending on the click's
+ * path (docs/verified.md, Gh): gclid (Search/Display), gbraid (app-to-web, iOS),
+ * wbraid (web-to-app, Android). At most one is ever present on a given click.
+ */
+const CLICK_ID_PARAMS = ["gclid", "gbraid", "wbraid"] as const;
+
+function readClickIds(): Record<(typeof CLICK_ID_PARAMS)[number], string | null> {
+  const search =
+    typeof window === "undefined" ? null : new URLSearchParams(window.location.search);
+  return {
+    gclid: search?.get("gclid") || null,
+    gbraid: search?.get("gbraid") || null,
+    wbraid: search?.get("wbraid") || null,
+  };
+}
+
+export const clickIds = readClickIds();
+
+/**
+ * Google's visitor number and visit number, read from the SAME tag that is already
+ * running on the page rather than derived here — gtag('get', ...) is the documented
+ * way to ask it (docs/verified.md, MP-5). Verified on production (this task): both
+ * come back even when cookies are refused, and stay the same after consent changes,
+ * because Advanced Consent Mode sends cookieless pings from the first paint rather
+ * than waiting for a choice.
+ *
+ * `gtag('get', ...)` is callback-based and Google does not document that the callback
+ * always fires (MP-5b: analytics_storage denied is silent on this), so the wait is
+ * bounded — checkout must not hang on an answer that never comes.
+ */
+const GTAG_GET_TIMEOUT_MS = 1000;
+
+function gtagGet(field: "client_id" | "session_id"): Promise<string | undefined> {
+  return new Promise((resolve) => {
+    if (!GA4_ID || !window.gtag) {
+      resolve(undefined);
+      return;
+    }
+    let settled = false;
+    const finish = (value: string | undefined) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    window.gtag("get", GA4_ID, field, (value: string | undefined) => finish(value));
+    setTimeout(() => finish(undefined), GTAG_GET_TIMEOUT_MS);
+  });
+}
+
+export async function ga4Identifiers(): Promise<{
+  client_id: string | null;
+  session_id: string | null;
+}> {
+  const [client_id, session_id] = await Promise.all([
+    gtagGet("client_id"),
+    gtagGet("session_id"),
+  ]);
+  return { client_id: client_id ?? null, session_id: session_id ?? null };
 }
