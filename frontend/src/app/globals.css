@@ -1,0 +1,551 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+/* ---------------------------------------------------------------------------
+   StudioFace — direction B, "Hoja de contactos". docs/DESIGN.md is the only
+   source for these values; they are appended last so they beat the shadcn
+   defaults above.
+
+   The page this replaced was Inter + Fraunces + cream #FAFAF7 + blue #1D4ED8 —
+   the 2026 "tasteful default", and the single P0 the design audit found.
+
+   Paper #F2F1ED, ink #141312 (16.1:1), accent #C3352B film-leader red (4.81:1 on
+   paper, computed not claimed). Spacing ratio 2: 6 12 24 48 96. Hard 1px rules, radius 0, NO shadows
+   anywhere — a contact sheet is a printed object, not a stack of floating cards.
+   --------------------------------------------------------------------------- */
+:root {
+  --background: #f2f1ed;
+  --foreground: #141312;
+  --card: #f2f1ed;
+  --card-foreground: #141312;
+  --popover: #f2f1ed;
+  --popover-foreground: #141312;
+  --primary: #c3352b;
+  --primary-foreground: #f2f1ed;
+  --secondary: #e6e4de;
+  --secondary-foreground: #141312;
+  --muted: #e6e4de;
+  --muted-foreground: #5c5851;
+  --accent: #e6e4de;
+  --accent-foreground: #141312;
+  --border: #141312;
+  --input: #141312;
+  --ring: #c3352b;
+  /* Was oklch(0.577 0.245 27.325), the untouched shadcn default: an off-brand red at
+     4.22:1 on paper, on the one message shown when something has gone wrong. This one
+     computes to 6.15:1 and belongs to the accent family. tests/test_contrast.py. */
+  --destructive: #a82a22;
+  --radius: 10px;
+
+  /* Spacing scale, ratio 2. Named so nothing is spaced ad hoc. */
+  --s1: 6px;
+  --s2: 12px;
+  --s3: 24px;
+  --s4: 48px;
+  --s5: 96px;
+}
+
+.dark {
+  --background: #141312;
+  --foreground: #f2f1ed;
+  --card: #141312;
+  --card-foreground: #f2f1ed;
+  --popover: #141312;
+  --popover-foreground: #f2f1ed;
+  --primary: #e8594d;
+  --primary-foreground: #141312;
+  --secondary: #24221f;
+  --secondary-foreground: #f2f1ed;
+  --muted: #24221f;
+  --muted-foreground: #a8a29a;
+  --accent: #24221f;
+  --accent-foreground: #f2f1ed;
+  --border: #f2f1ed;
+  --input: #f2f1ed;
+  --ring: #e8594d;
+  --destructive: #ff8a7d;
+}
+
+@theme inline {
+  /* Running body copy is humanist, NOT monospace. The critique of variant B
+     (docs/design-review/2026-09-17-2015) was that body-wide Chivo Mono reads as a
+     technical document to a buyer deciding whether to trust us with their face.
+     Mono is kept for what it is actually for here: frame numbers and labels. */
+  --font-sans: var(--font-public-sans);
+  --font-heading: var(--font-newsreader);
+}
+
+
+/* The focus ring APPEARS. It used to draw itself over 220ms with a box-shadow
+   keyframe, which broke two rules at once — box-shadow is not opacity or transform, and
+   a keyboard user is waiting on that ring to know where they are. 220ms of drawing is
+   220ms of not knowing. */
+.sf-focus:focus-visible {
+  outline: 0;
+  box-shadow:
+    0 0 0 2px var(--background),
+    0 0 0 5px var(--primary);
+}
+
+/* ---------------------------------------------------------------------------
+   MOTION — five named moments, and nothing else on this site moves.
+
+   Rules, from .claude/skills/studioface-ui: no library, opacity and transform only,
+   nothing over 400ms, nothing loops, nothing moves on page load. Every moment is
+   triggered by something the visitor did.
+
+   The 400ms ceiling is OUR decision, not a standard. Material Design 2 and 3 are
+   JS-rendered and unfetchable; MDN and web.dev give examples but nothing normative.
+   Recorded in docs/verified.md as unverified so nobody cites it as an authority.
+
+   prefers-reduced-motion is Baseline Widely Available, across browsers since January
+   2020 (MDN, verified 18 Sep 2026) — so the no-preference query needs no fallback and
+   a visitor who has asked for less motion gets none of this.
+
+   docs/DESIGN.md holds the table: trigger, property, duration, easing, reason.
+   tests/test_motion.py enforces every rule above against this file.
+   --------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: no-preference) {
+  /* 1 — sf-frame: the upload target lifts under a pointer. The one control on the page
+     that asks for a file has to feel like a thing you can put something into. */
+  .sf-frame {
+    transition: transform 140ms ease-out;
+  }
+  .sf-frame:hover {
+    transform: translateY(-3px);
+  }
+
+  /* 2 — sf-press: every primary button gives under a thumb. On a phone there is no
+     hover, so this is the only tactile confirmation a tap gets before the network. */
+  .sf-press {
+    transition: transform 80ms ease-out;
+  }
+  .sf-press:active {
+    transform: scale(0.98);
+  }
+
+  /* 3 — sf-arrive: the free preview rises in. The single most loaded moment in the
+     product — a stranger seeing their own face come back — and it used to snap. */
+  .sf-arrive {
+    animation: sf-rise 300ms ease-out both;
+  }
+
+  /* 4 — sf-land: each delivered photograph fades into the frame that was holding its
+     place. Staggered in the component, capped so the last one still ends under 400ms. */
+  .sf-land {
+    animation: sf-fade 250ms ease-out both;
+  }
+
+  /* 5 — sf-answer: an FAQ answer rises rather than appearing under the question, so the
+     eye follows the disclosure instead of re-finding the text. */
+  details[open] .sf-answer {
+    animation: sf-rise 180ms ease-out both;
+  }
+}
+
+@keyframes sf-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes sf-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The global guard. Belt and braces: everything above is already inside a no-preference
+   query, and this catches whatever is added next by somebody who did not read it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.sf-wrap {
+  width: 100%;
+  max-width: 1200px;
+  margin-inline: auto;
+  padding-inline: var(--s3);
+}
+
+/* Unit U1, 19 Sep 2026. The header was 145px on a 390px phone: three wrapped rows
+   (wordmark, two links, price) eating 17% of the first viewport before the product
+   said anything. Below 900px it is one row and the links go; the price stays, because
+   the header carries the only price a phone visitor meets before the consent banner
+   covers the rest of the screen.
+
+   Written as plain CSS on purpose (M14): Tailwind 4 arbitrary values have failed
+   silently for critical layout on another of Kevin's sites, and these four numbers are
+   the ones the geometry tests measure. */
+/* The height lives on <header>, with border-box, because that is the element the
+   geometry test measures and the 1px rule underneath it is part of what a visitor
+   loses from the first screen. Putting 56px on the inner row gave 57px. */
+.sf-header {
+  box-sizing: border-box;
+  height: 56px;
+}
+
+.sf-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: nowrap;
+  gap: var(--s3);
+  height: 100%;
+}
+
+.sf-header-nav {
+  display: none;
+}
+
+.sf-header-mark {
+  display: inline-flex;
+  align-items: center;
+  /* 56px row, so the 44px tap target is the row itself rather than a taller box that
+     would push the header past the limit it is here to enforce. */
+  min-height: 44px;
+}
+
+@media (min-width: 900px) {
+  .sf-header {
+    height: auto;
+  }
+
+  .sf-header-row {
+    flex-wrap: wrap;
+    height: auto;
+    padding-block: var(--s2);
+  }
+
+  .sf-header-nav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--s3);
+  }
+}
+
+/* Unit U2, 19 Sep 2026. The H1 was clamp(38px,6.4vw,68px) with a 16ch cap, which on a
+   390px phone is 38px over three lines (four at 360). At 30px with a 24ch cap the same
+   sentence holds two lines, which is what the measured prototype of F11 reported, and
+   every pixel it gives back is a pixel of proof above the fold.
+
+   Only below 640px. "Current size on desktop" is U2's instruction, so from 640px up the
+   clamp, line-height, tracking and cap are exactly what they were. */
+.sf-h1 {
+  font-size: 30px;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+  max-width: 24ch;
+}
+
+@media (min-width: 640px) {
+  .sf-h1 {
+    font-size: clamp(38px, 6.4vw, 68px);
+    line-height: 1.02;
+    letter-spacing: -0.02em;
+    max-width: 16ch;
+  }
+}
+
+/* Unit U3, 19 Sep 2026. The before/after comparison slider that replaces the inset
+   "Antes" thumbnail in the hero.
+
+   Plain CSS, not arbitrary-value classes (M14): the aspect ratio and the 42svh cap are
+   two of the numbers the geometry tests measure, and Tailwind 4 arbitrary values have
+   failed silently for critical layout on another of Kevin's sites.
+
+   No transition anywhere in here. U3 asks for no animation on load and for nothing at all
+   under prefers-reduced-motion; the way to satisfy both is to have none to suppress. */
+.sf-ba {
+  --p: 50%;
+  position: relative;
+  aspect-ratio: 1 / 1;
+  max-height: 42svh;
+  margin-inline: auto;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  background: var(--background);
+}
+
+.sf-ba img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* The "antes" is revealed from the left edge to the handle. `inset()` is Baseline widely
+   available, across browsers since January 2020 (MDN, recorded in docs/verified.md). */
+.sf-ba-antes {
+  clip-path: inset(0 calc(100% - var(--p)) 0 0);
+}
+
+.sf-ba-divider {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--p);
+  width: 2px;
+  margin-left: -1px;
+  background: var(--background);
+  pointer-events: none;
+}
+
+.sf-ba-handle {
+  position: absolute;
+  top: 50%;
+  left: var(--p);
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
+  border-radius: 50%;
+  border: 1px solid var(--foreground);
+  background: var(--background);
+  display: grid;
+  place-items: center;
+  font-size: 14px;
+  color: var(--foreground);
+  pointer-events: none;
+}
+
+/* The control itself: a real range input, stretched over the frame and invisible. It
+   keeps the keyboard behaviour, the arrow keys, the touch target and the screen-reader
+   semantics that a div with a drag listener throws away. */
+.sf-ba-range {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: ew-resize;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+}
+
+/* The ring has to be drawn on the handle, because the input carrying the focus is
+   invisible. Without this the control is keyboard-operable and gives no sign of it. */
+.sf-ba-range:focus-visible ~ .sf-ba-handle {
+  outline: 3px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.sf-ba-tag {
+  position: absolute;
+  top: 8px;
+  z-index: 1;
+  background: var(--background);
+  color: var(--foreground);
+  padding: 2px 8px;
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.sf-ba-tag-antes {
+  left: 8px;
+}
+
+.sf-ba-tag-despues {
+  right: 8px;
+}
+
+@media (min-width: 900px) {
+  .sf-ba {
+    aspect-ratio: 4 / 5;
+    max-height: none;
+  }
+}
+
+/* Unit U4, 19 Sep 2026. The consent banner was 153px at 390 and 173px at 360 - 27% of a
+   360px screen spent on a cookie notice before the product had said anything. Layout
+   only: the text, the logic, the storage key and every gtag call are untouched (M7).
+
+   Plain CSS (M14): the banner height is one of the four numbers the geometry tests
+   measure. Budget at 390, which comes to 106px against U4's 112:
+     1 border + 9 padding + 2 lines at 13/1.35 (35) + 8 gap + 44 buttons + 9 padding */
+.sf-consent-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-block: 9px;
+}
+
+.sf-consent-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+/* The tap target without the line box. The link used to be an inline-flex with
+   min-height 44px, which inflated the paragraph's line height and was a large part of
+   the 153px. This keeps the 44px touch area and takes it out of the layout: the buttons
+   come later in the DOM, so where the two hit areas meet the buttons win. */
+.sf-consent-link {
+  position: relative;
+}
+
+.sf-consent-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 44px;
+  transform: translateY(-50%);
+}
+
+.sf-consent-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+/* Equal width, not width-of-the-word. "Rechazar" is a longer word than "Aceptar" and
+   that is not a reason to make it a different control. */
+.sf-consent-buttons > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+@media (min-width: 900px) {
+  .sf-consent-row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--s3);
+  }
+
+  .sf-consent-buttons {
+    flex: 0 0 auto;
+  }
+
+  .sf-consent-buttons > * {
+    flex: 0 0 120px;
+  }
+}
+
+/* Unit U5, 19 Sep 2026. The first-screen call to action.
+
+   F3: of 24 sites in the category, StudioFace was the only one with no primary call to
+   action inside the first 844px. The only product button was the uploader's submit at
+   y=1283, against a usable first viewport of 691px, and it rendered disabled. */
+.sf-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 52px;
+  margin-top: var(--s1);
+  border-radius: var(--radius);
+  background: var(--primary);
+  color: var(--primary-foreground);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+/* --s1 rather than --s2 above the button, and pt-2 on the hero section. The first
+   measurement put the button's top at 559 against U5's limit of 560, which passes and is
+   not a margin - any word added to the disclosure caption would have broken it. */
+
+.sf-cta-micro {
+  margin: var(--s1) 0 0;
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: center;
+  color: var(--muted-foreground);
+}
+
+/* The caption is the AI disclosure and it sits between the frame and the button, so its
+   line box is part of U5's budget. 13/1.4 rather than 14/1.5. */
+.sf-ba-caption {
+  margin-top: var(--s1);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+/* U3 sets max-height: 42svh, which is what F11 measured at 390x844 - and there the frame
+   is limited by its width anyway, so the cap never binds. At 360x640 it does bind, at
+   269px, and 42svh plus the caption U3 requires leaves the button below the banner. This
+   is the tighter cap that only short viewports ever see. Budget at 360, against a banner
+   that starts at 534: 177 slider top + 218 frame + 6 + 55 caption + 12 + 52 button = 520. */
+@media (max-height: 700px) {
+  .sf-ba {
+    max-height: 34svh;
+  }
+}
+
+/* Smooth for the anchor, and the global prefers-reduced-motion guard already forces this
+   back to `auto !important`, which is how U5's "instantly under reduced motion" is met. */
+html {
+  scroll-behavior: smooth;
+}

@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="es-ES"><head><meta charset="utf-8"><title>StudioFace</title></head>
+<body>
+<h1>Tu foto de perfil profesional, revelada en dos minutos</h1>
+<div class="min-h-[65px]"><iframe title="widget"></iframe></div>
+<input name="cf-turnstile-response" value="tok">
+<!-- Outage 3, reproduced. The API base pointed at another hostname, so every call was
+     cross-origin against a service with no CORSMiddleware. -->
+<script>fetch("https://api.studioface.test/api/preview", { method: "POST" }).catch(() => {});</script>
+</body></html>

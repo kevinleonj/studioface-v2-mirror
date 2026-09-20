@@ -1,0 +1,7 @@
+{
+  "ci": {
+    "collect": { "url": ["https://studioface.app/"], "numberOfRuns": 1, "settings": { "preset": "desktop" } },
+    "assert": { "assertions": { "categories:performance": ["error", { "minScore": 0.9 }] } },
+    "upload": { "target": "temporary-public-storage" }
+  }
+}

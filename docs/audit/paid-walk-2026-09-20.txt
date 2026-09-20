@@ -1,0 +1,12 @@
+============================= test session starts =============================
+platform win32 -- Python 3.12.10, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\KEVIN\dev\studioface-v2\.venv\Scripts\python.exe
+cachedir: .pytest_cache
+rootdir: C:\Users\KEVIN\dev\studioface-v2
+configfile: pyproject.toml
+plugins: anyio-4.15.1
+collecting ... collected 8 items / 6 deselected / 2 selected
+
+tests/e2e/test_funnel.py::test_paying_lands_on_the_gallery_with_four_real_images PASSED [ 50%]
+tests/e2e/test_funnel.py::test_descargar_downloads_and_the_tab_stays_put PASSED [100%]
+
+================= 2 passed, 6 deselected in 92.01s (0:01:32) ==================

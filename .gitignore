@@ -1,0 +1,40 @@
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+logs/
+*.log
+.venv/
+*.egg-info/
+infra/.terraform/
+infra/*.tfstate*
+infra/terraform.tfvars
+.bootstrap-answers.json
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.production
+.env
+.env.*
+!.env.example
+.claude/state/
+.claude/settings.local.json
+firebase-debug.log
+# Playwright MCP scratch: the design-critic drives a real browser and drops a page
+# snapshot per navigation. 49 of them after two critique rounds. The reviews it is
+# meant to keep live in docs/design-review/, which is tracked.
+.playwright-mcp/
+
+# UI snapshots (B0.3). The raw frames are evidence for one run and there are hundreds of
+# them; the contact sheets and geometry.json are the record, so those are committed.
+docs/ui/**/*.png
+!docs/ui/**/sheet--*.png
+docs/ui/**/_fixtures/
+docs/ui/**/_probe-selfie.jpg
+docs/ui/**/_stability/
+docs/ui/**/_faildemo/
+
+# The browser walk writes preview and gallery bytes here (scripts/run_funnel.py).
+.funnel-storage/
+
+# The task loop's own log (scripts/queue_runner.py).
+work/run.log

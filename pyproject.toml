@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "studioface"
+version = "0.2.0"
+requires-python = ">=3.12"
+dependencies = ["fastapi", "uvicorn", "python-multipart", "httpx", "fal-client", "stripe", "resend",
+                "google-cloud-firestore", "google-cloud-storage", "google-cloud-tasks", "pillow", "pillow-heif"]
+
+[project.optional-dependencies]
+dev = ["pytest==9.1.1", "httpx==0.28.1", "ruff==0.16.8", "keyring==25.7.0", "pyyaml==6.0.3",
+       "playwright==1.55.0"]
+# keyring: bootstrap stores secrets in the OS credential store, so they are never re-typed.
+# playwright: scripts/verify_production.py puts a REAL BROWSER on the real internet against
+#   the deployed hostname. Three outages shipped because every test ran either inside the
+#   process or against a static export on localhost, and neither can see a widget that
+#   never mounts or a fetch that never completes.
+
+[tool.setuptools]
+packages = ["app", "app.adapters"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# tests/fixtures holds deliberately bad code. offenders.py exists to contain every
+# violation the source-scanning tests claim to catch, so linting it clean would delete
+# the thing being tested. The fixture is never imported by the product.
+extend-exclude = ["tests/fixtures"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "C90"]   # errors, unused, imports, bugbear, modern, simplify, complexity
+mccabe.max-complexity = 8
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

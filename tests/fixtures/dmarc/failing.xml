@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- The failing case, and it is the shape that actually matters: a source that passes
+     SPF but fails DKIM alignment, plus an unrelated IP forging the header_from.
+
+     RFC 7489 evaluates alignment, not raw authentication: a message can have spf=pass in
+     auth_results and still fail DMARC when the authenticated domain is not aligned with
+     header_from. The second record here is exactly that, which is why the parser must
+     read policy_evaluated rather than only auth_results. -->
+<feedback>
+  <report_metadata>
+    <org_name>google.com</org_name>
+    <email>noreply-dmarc-support@google.com</email>
+    <report_id>4512099120294967296</report_id>
+    <date_range>
+      <begin>1789430400</begin>
+      <end>1789516800</end>
+    </date_range>
+  </report_metadata>
+  <policy_published>
+    <domain>studioface.app</domain>
+    <adkim>r</adkim>
+    <aspf>r</aspf>
+    <p>quarantine</p>
+    <pct>100</pct>
+  </policy_published>
+  <record>
+    <row>
+      <source_ip>54.240.8.31</source_ip>
+      <count>9</count>
+      <policy_evaluated>
+        <disposition>none</disposition>
+        <dkim>pass</dkim>
+        <spf>pass</spf>
+      </policy_evaluated>
+    </row>
+    <identifiers>
+      <header_from>studioface.app</header_from>
+    </identifiers>
+    <auth_results>
+      <dkim>
+        <domain>studioface.app</domain>
+        <result>pass</result>
+        <selector>resend</selector>
+      </dkim>
+      <spf>
+        <domain>studioface.app</domain>
+        <result>pass</result>
+      </spf>
+    </auth_results>
+  </record>
+  <record>
+    <row>
+      <source_ip>203.0.113.7</source_ip>
+      <count>41</count>
+      <policy_evaluated>
+        <disposition>quarantine</disposition>
+        <dkim>fail</dkim>
+        <spf>fail</spf>
+      </policy_evaluated>
+    </row>
+    <identifiers>
+      <header_from>studioface.app</header_from>
+    </identifiers>
+    <auth_results>
+      <dkim>
+        <domain>elsewhere.example</domain>
+        <result>fail</result>
+        <selector>default</selector>
+      </dkim>
+      <spf>
+        <domain>elsewhere.example</domain>
+        <result>softfail</result>
+      </spf>
+    </auth_results>
+  </record>
+  <record>
+    <row>
+      <source_ip>198.51.100.22</source_ip>
+      <count>2</count>
+      <policy_evaluated>
+        <disposition>none</disposition>
+        <dkim>fail</dkim>
+        <spf>pass</spf>
+      </policy_evaluated>
+    </row>
+    <identifiers>
+      <header_from>studioface.app</header_from>
+    </identifiers>
+    <auth_results>
+      <dkim>
+        <domain>mailer.example</domain>
+        <result>pass</result>
+        <selector>s1</selector>
+      </dkim>
+      <spf>
+        <domain>studioface.app</domain>
+        <result>pass</result>
+      </spf>
+    </auth_results>
+  </record>
+</feedback>

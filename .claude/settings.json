@@ -1,0 +1,123 @@
+{
+  "model": "opus",
+  "effortLevel": "high",
+  "fallbackModel": [
+    "claude-sonnet-5"
+  ],
+  "env": {
+    "CLAUDE_CODE_SUBAGENT_MODEL": "sonnet"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(ruff *)",
+      "Bash(npm *)",
+      "Bash(npx *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(cat -n *)",
+      "Bash(gh run *)",
+      "Bash(gh pr *)",
+      "Bash(gcloud run services describe *)",
+      "Bash(gcloud logging read *)",
+      "Bash(curl *)",
+      "Bash(docker build *)",
+      "Bash(.venv/Scripts/python.exe *)",
+      "PowerShell(.venv\\\\Scripts\\\\python.exe *)",
+      "PowerShell(& .venv\\\\Scripts\\\\python.exe *)",
+      "Bash(git push origin main*)",
+      "Bash(git push -u origin main*)"
+    ],
+    "deny": [
+      "Bash(gcloud run deploy*)",
+      "Bash(gcloud * delete*)",
+      "Bash(gcloud secrets versions add*)",
+      "Bash(terraform apply*)",
+      "Bash(terraform destroy*)",
+      "Bash(firebase deploy*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(rm -rf *)",
+      "Read(.env*)",
+      "Read(**/SecretsDoNotEdit*)",
+      "Read(infra/*.tfstate*)",
+      "Read(infra/terraform.tfvars)",
+      "PowerShell(Remove-Item * -Recurse*)",
+      "PowerShell(gcloud run deploy*)",
+      "PowerShell(terraform apply*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.venv/Scripts/python.exe",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/session_context.py"
+            ]
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.venv/Scripts/python.exe",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/block_irreversible.py"
+            ]
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.venv/Scripts/python.exe",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/lint_on_write.py"
+            ],
+            "timeout": 60
+          }
+        ]
+      }
+    ],
+    "TaskCompleted": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.venv/Scripts/python.exe",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/scripts/ci.py"
+            ]
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.venv/Scripts/python.exe",
+            "args": [
+              "${CLAUDE_PROJECT_DIR}/.claude/hooks/stop_gate.py"
+            ],
+            "timeout": 300
+          }
+        ]
+      }
+    ]
+  }
+}

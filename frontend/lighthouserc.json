@@ -1,0 +1,11 @@
+{
+  "ci": {
+    "collect": {
+      "url": ["https://studioface.app/", "https://studioface.app/recuperar/"],
+      "numberOfRuns": 1,
+      "settings": { "formFactor": "mobile", "throttlingMethod": "simulate" }
+    },
+    "assert": { "assertions": { "categories:performance": ["error", { "minScore": 0.9 }] } },
+    "upload": { "target": "temporary-public-storage" }
+  }
+}

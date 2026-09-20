@@ -1,0 +1,1 @@
+studioface-v2 pack 2026-09-17-m  (GitOps: CI applies Terraform; self-heal workflow; CI secrets sync)

@@ -1,0 +1,48 @@
+#!/bin/sh
+# Refuse a red push. Versioned, because a hook in .git/hooks exists on exactly one
+# machine and is invisible to review — this one is set up with
+#
+#   git config core.hooksPath .githooks
+#
+# which bootstrap.py does, and tests/test_pre_push_hook.py asserts.
+#
+# Measured cost: about 100s cold, 12s when nothing has changed, because the gate skips
+# steps whose inputs are unchanged since the last green run.
+#
+# EMERGENCY ESCAPE HATCH
+#   SF_SKIP_GATE="why you are skipping" git push origin main
+# It is deliberately not a bare flag: it demands a sentence, and it writes that
+# sentence and the commit into HANDOFF.md so the skip is a fact in the repository
+# rather than a thing that happened on somebody's laptop.
+
+set -e
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+if [ -n "$SF_SKIP_GATE" ]; then
+  SHA="$(git rev-parse --short HEAD)"
+  WHEN="$(date -u '+%Y-%m-%d %H:%M UTC')"
+  {
+    printf '\n## GATE SKIPPED — %s\n' "$WHEN"
+    printf 'Commit %s pushed without the local gate.\n' "$SHA"
+    printf 'Reason given: %s\n' "$SF_SKIP_GATE"
+    printf 'CI still runs the full pipeline; this records that the local mirror did not.\n'
+  } >> HANDOFF.md
+  echo "pre-push: GATE SKIPPED — reason recorded in HANDOFF.md"
+  echo "pre-push: commit the HANDOFF.md change; the skip is part of the history."
+  exit 0
+fi
+
+PYTHON=".venv/Scripts/python.exe"
+[ -x "$PYTHON" ] || PYTHON=".venv/bin/python"
+[ -x "$PYTHON" ] || PYTHON="python"
+
+echo "pre-push: running the CI mirror gate..."
+if ! "$PYTHON" scripts/ci.py; then
+  echo ""
+  echo "pre-push: REFUSED. The gate is red — the failing step is named above."
+  echo "pre-push: fix it, or push with a reason:"
+  echo "          SF_SKIP_GATE=\"why\" git push origin main"
+  exit 1
+fi

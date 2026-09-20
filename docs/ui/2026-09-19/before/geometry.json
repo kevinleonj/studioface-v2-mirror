@@ -1,0 +1,3754 @@
+{
+  "base": "http://127.0.0.1:8099",
+  "browsers": [
+    "chromium"
+  ],
+  "pages": {
+    "chromium/1440x900/gallery": {
+      "first-visit": {
+        "banner": {
+          "bottom": 900,
+          "display": "block",
+          "h": 77,
+          "position": "fixed",
+          "top": 823,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 823
+        },
+        "bannerPresent": true,
+        "cta": null,
+        "document": {
+          "h": 900,
+          "scrollWidth": 1440
+        },
+        "h1": {
+          "bottom": 173,
+          "display": "block",
+          "h": 40,
+          "position": "static",
+          "top": 133,
+          "visible": true,
+          "w": 1152,
+          "x": 144,
+          "y": 133
+        },
+        "header": {
+          "bottom": 69,
+          "display": "block",
+          "h": 69,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 401,
+          "display": "block",
+          "h": 332,
+          "position": "static",
+          "top": 69,
+          "visible": true,
+          "w": 1200,
+          "x": 120,
+          "y": 69
+        },
+        "horizontalScroll": false,
+        "pinned": [
+          {
+            "bottom": 900,
+            "cls": "fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--b",
+            "display": "block",
+            "h": 77,
+            "position": "fixed",
+            "tag": "div",
+            "top": 823,
+            "visible": true,
+            "w": 1440,
+            "x": 0,
+            "y": 823
+          }
+        ],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 900,
+          "w": 1440
+        }
+      },
+      "rejected": {
+        "banner": null,
+        "cta": null,
+        "document": {
+          "h": 900,
+          "scrollWidth": 1440
+        },
+        "h1": {
+          "bottom": 173,
+          "display": "block",
+          "h": 40,
+          "position": "static",
+          "top": 133,
+          "visible": true,
+          "w": 1152,
+          "x": 144,
+          "y": 133
+        },
+        "header": {
+          "bottom": 69,
+          "display": "block",
+          "h": 69,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 401,
+          "display": "block",
+          "h": 332,
+          "position": "static",
+          "top": 69,
+          "visible": true,
+          "w": 1200,
+          "x": 120,
+          "y": 69
+        },
+        "horizontalScroll": false,
+        "pinned": [],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 900,
+          "w": 1440
+        }
+      }
+    },
+    "chromium/1440x900/home": {
+      "first-visit": {
+        "banner": {
+          "bottom": 900,
+          "display": "block",
+          "h": 77,
+          "position": "fixed",
+          "top": 823,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 823
+        },
+        "bannerPresent": true,
+        "cta": {
+          "bottom": 1053.5,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 1009.5,
+          "visible": true,
+          "w": 1104,
+          "x": 168,
+          "y": 1009.5
+        },
+        "document": {
+          "h": 2555,
+          "scrollWidth": 1440
+        },
+        "h1": {
+          "bottom": 325.08,
+          "display": "block",
+          "h": 208.08,
+          "position": "static",
+          "top": 117,
+          "visible": true,
+          "w": 616.34,
+          "x": 144,
+          "y": 117
+        },
+        "header": {
+          "bottom": 69,
+          "display": "block",
+          "h": 69,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1077.5,
+          "display": "block",
+          "h": 1008.5,
+          "position": "static",
+          "top": 69,
+          "visible": true,
+          "w": 1200,
+          "x": 120,
+          "y": 69
+        },
+        "horizontalScroll": false,
+        "pinned": [
+          {
+            "bottom": 900,
+            "cls": "fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--b",
+            "display": "block",
+            "h": 77,
+            "position": "fixed",
+            "tag": "div",
+            "top": 823,
+            "visible": true,
+            "w": 1440,
+            "x": 0,
+            "y": 823
+          }
+        ],
+        "sticky": null,
+        "uploader": {
+          "bottom": 993.5,
+          "display": "block",
+          "h": 152,
+          "position": "static",
+          "top": 841.5,
+          "visible": true,
+          "w": 1104,
+          "x": 168,
+          "y": 841.5
+        },
+        "viewport": {
+          "dpr": 1,
+          "h": 900,
+          "w": 1440
+        }
+      },
+      "rejected": {
+        "banner": null,
+        "cta": {
+          "bottom": 1053.5,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 1009.5,
+          "visible": true,
+          "w": 1104,
+          "x": 168,
+          "y": 1009.5
+        },
+        "document": {
+          "h": 2478,
+          "scrollWidth": 1440
+        },
+        "h1": {
+          "bottom": 325.08,
+          "display": "block",
+          "h": 208.08,
+          "position": "static",
+          "top": 117,
+          "visible": true,
+          "w": 616.34,
+          "x": 144,
+          "y": 117
+        },
+        "header": {
+          "bottom": 69,
+          "display": "block",
+          "h": 69,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1077.5,
+          "display": "block",
+          "h": 1008.5,
+          "position": "static",
+          "top": 69,
+          "visible": true,
+          "w": 1200,
+          "x": 120,
+          "y": 69
+        },
+        "horizontalScroll": false,
+        "pinned": [],
+        "sticky": null,
+        "uploader": {
+          "bottom": 990.5,
+          "display": "block",
+          "h": 152,
+          "position": "static",
+          "top": 838.5,
+          "visible": true,
+          "w": 1104,
+          "x": 168,
+          "y": 838.5
+        },
+        "viewport": {
+          "dpr": 1,
+          "h": 900,
+          "w": 1440
+        }
+      },
+      "upload-chosen": {
+        "alerts": [],
+        "banner": null,
+        "cta": {
+          "bottom": 1053.5,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 1009.5,
+          "visible": true,
+          "w": 1104,
+          "x": 168,
+          "y": 1009.5
+        },
+        "ctaDisabled": false,
+        "document": {
+          "h": 2478,
+          "scrollWidth": 1440
+        },
+        "h1": {
+          "bottom": 325.08,
+          "display": "block",
+          "h": 208.08,
+          "position": "static",
+          "top": 117,
+          "visible": true,
+          "w": 616.34,
+          "x": 144,
+          "y": 117
+        },
+        "header": {
+          "bottom": 69,
+          "display": "block",
+          "h": 69,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1077.5,
+          "display": "block",
+          "h": 1008.5,
+          "position": "static",
+          "top": 69,
+          "visible": true,
+          "w": 1200,
+          "x": 120,
+          "y": 69
+        },
+        "horizontalScroll": false,
+        "label": "2 de 4 elegidas | Elegir otras fotos | selfie-0.jpg \u00b7 selfie-1.jpg",
+        "pinned": [],
+        "status": [],
+        "sticky": null,
+        "uploader": {
+          "bottom": 990.5,
+          "display": "block",
+          "h": 152,
+          "position": "static",
+          "top": 838.5,
+          "visible": true,
+          "w": 1104,
+          "x": 168,
+          "y": 838.5
+        },
+        "viewport": {
+          "dpr": 1,
+          "h": 900,
+          "w": 1440
+        }
+      },
+      "upload-invalid": {
+        "alerts": [],
+        "banner": null,
+        "cta": {
+          "bottom": 1053.5,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 1009.5,
+          "visible": true,
+          "w": 1104,
+          "x": 168,
+          "y": 1009.5
+        },
+        "ctaDisabled": false,
+        "document": {
+          "h": 2478,
+          "scrollWidth": 1440
+        },
+        "h1": {
+          "bottom": 325.08,
+          "display": "block",
+          "h": 208.08,
+          "position": "static",
+          "top": 117,
+          "visible": true,
+          "w": 616.34,
+          "x": 144,
+          "y": 117
+        },
+        "header": {
+          "bottom": 69,
+          "display": "block",
+          "h": 69,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1077.5,
+          "display": "block",
+          "h": 1008.5,
+          "position": "static",
+          "top": 69,
+          "visible": true,
+          "w": 1200,
+          "x": 120,
+          "y": 69
+        },
+        "horizontalScroll": false,
+        "label": "1 de 4 elegidas | Elegir otras fotos | not-an-image.jpg",
+        "pinned": [],
+        "status": [],
+        "sticky": null,
+        "uploader": {
+          "bottom": 990.5,
+          "display": "block",
+          "h": 152,
+          "position": "static",
+          "top": 838.5,
+          "visible": true,
+          "w": 1104,
+          "x": 168,
+          "y": 838.5
+        },
+        "viewport": {
+          "dpr": 1,
+          "h": 900,
+          "w": 1440
+        }
+      },
+      "upload-invalid-sent": {
+        "alerts": [
+          "Alguno de los archivos no es una imagen."
+        ],
+        "banner": null,
+        "cta": {
+          "bottom": 1089.5,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 1045.5,
+          "visible": true,
+          "w": 1104,
+          "x": 168,
+          "y": 463.5
+        },
+        "ctaDisabled": false,
+        "document": {
+          "h": 2514,
+          "scrollWidth": 1440
+        },
+        "h1": {
+          "bottom": 325.08,
+          "display": "block",
+          "h": 208.08,
+          "position": "static",
+          "top": 117,
+          "visible": true,
+          "w": 616.34,
+          "x": 144,
+          "y": -465
+        },
+        "header": {
+          "bottom": 69,
+          "display": "block",
+          "h": 69,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": -582
+        },
+        "hero": {
+          "bottom": 1113.5,
+          "display": "block",
+          "h": 1044.5,
+          "position": "static",
+          "top": 69,
+          "visible": true,
+          "w": 1200,
+          "x": 120,
+          "y": -513
+        },
+        "horizontalScroll": false,
+        "label": "1 de 4 elegidas | Elegir otras fotos | not-an-image.jpg",
+        "pinned": [],
+        "status": [],
+        "sticky": null,
+        "uploader": {
+          "bottom": 993.5,
+          "display": "block",
+          "h": 152,
+          "position": "static",
+          "top": 841.5,
+          "visible": true,
+          "w": 1104,
+          "x": 168,
+          "y": 259.5
+        },
+        "viewport": {
+          "dpr": 1,
+          "h": 900,
+          "w": 1440
+        }
+      },
+      "upload-too-many": {
+        "alerts": [],
+        "banner": null,
+        "cta": {
+          "bottom": 1053.5,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 1009.5,
+          "visible": true,
+          "w": 1104,
+          "x": 168,
+          "y": 427.5
+        },
+        "ctaDisabled": false,
+        "document": {
+          "h": 2478,
+          "scrollWidth": 1440
+        },
+        "h1": {
+          "bottom": 325.08,
+          "display": "block",
+          "h": 208.08,
+          "position": "static",
+          "top": 117,
+          "visible": true,
+          "w": 616.34,
+          "x": 144,
+          "y": -465
+        },
+        "header": {
+          "bottom": 69,
+          "display": "block",
+          "h": 69,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": -582
+        },
+        "hero": {
+          "bottom": 1077.5,
+          "display": "block",
+          "h": 1008.5,
+          "position": "static",
+          "top": 69,
+          "visible": true,
+          "w": 1200,
+          "x": 120,
+          "y": -513
+        },
+        "horizontalScroll": false,
+        "label": "5 de 4 elegidas | Elegir otras fotos | selfie-0.jpg \u00b7 selfie-1.jpg \u00b7 selfie-2.jpg \u00b7 selfie-3.jpg \u00b7 selfie-4.jpg",
+        "pinned": [],
+        "status": [],
+        "sticky": null,
+        "uploader": {
+          "bottom": 993.5,
+          "display": "block",
+          "h": 152,
+          "position": "static",
+          "top": 841.5,
+          "visible": true,
+          "w": 1104,
+          "x": 168,
+          "y": 259.5
+        },
+        "viewport": {
+          "dpr": 1,
+          "h": 900,
+          "w": 1440
+        }
+      }
+    },
+    "chromium/1440x900/legal-aviso": {
+      "first-visit": {
+        "banner": {
+          "bottom": 900,
+          "display": "block",
+          "h": 77,
+          "position": "fixed",
+          "top": 823,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 823
+        },
+        "bannerPresent": true,
+        "cta": null,
+        "document": {
+          "h": 1193,
+          "scrollWidth": 1440
+        },
+        "h1": {
+          "bottom": 173,
+          "display": "block",
+          "h": 40,
+          "position": "static",
+          "top": 133,
+          "visible": true,
+          "w": 1152,
+          "x": 144,
+          "y": 133
+        },
+        "header": {
+          "bottom": 69,
+          "display": "block",
+          "h": 69,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 901,
+          "display": "block",
+          "h": 832,
+          "position": "static",
+          "top": 69,
+          "visible": true,
+          "w": 1200,
+          "x": 120,
+          "y": 69
+        },
+        "horizontalScroll": false,
+        "pinned": [
+          {
+            "bottom": 900,
+            "cls": "fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--b",
+            "display": "block",
+            "h": 77,
+            "position": "fixed",
+            "tag": "div",
+            "top": 823,
+            "visible": true,
+            "w": 1440,
+            "x": 0,
+            "y": 823
+          }
+        ],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 900,
+          "w": 1440
+        }
+      },
+      "rejected": {
+        "banner": null,
+        "cta": null,
+        "document": {
+          "h": 1116,
+          "scrollWidth": 1440
+        },
+        "h1": {
+          "bottom": 173,
+          "display": "block",
+          "h": 40,
+          "position": "static",
+          "top": 133,
+          "visible": true,
+          "w": 1152,
+          "x": 144,
+          "y": 133
+        },
+        "header": {
+          "bottom": 69,
+          "display": "block",
+          "h": 69,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 901,
+          "display": "block",
+          "h": 832,
+          "position": "static",
+          "top": 69,
+          "visible": true,
+          "w": 1200,
+          "x": 120,
+          "y": 69
+        },
+        "horizontalScroll": false,
+        "pinned": [],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 900,
+          "w": 1440
+        }
+      }
+    },
+    "chromium/1440x900/legal-cookies": {
+      "first-visit": {
+        "banner": {
+          "bottom": 900,
+          "display": "block",
+          "h": 77,
+          "position": "fixed",
+          "top": 823,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 823
+        },
+        "bannerPresent": true,
+        "cta": null,
+        "document": {
+          "h": 1017,
+          "scrollWidth": 1440
+        },
+        "h1": {
+          "bottom": 173,
+          "display": "block",
+          "h": 40,
+          "position": "static",
+          "top": 133,
+          "visible": true,
+          "w": 1152,
+          "x": 144,
+          "y": 133
+        },
+        "header": {
+          "bottom": 69,
+          "display": "block",
+          "h": 69,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 725,
+          "display": "block",
+          "h": 656,
+          "position": "static",
+          "top": 69,
+          "visible": true,
+          "w": 1200,
+          "x": 120,
+          "y": 69
+        },
+        "horizontalScroll": false,
+        "pinned": [
+          {
+            "bottom": 900,
+            "cls": "fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--b",
+            "display": "block",
+            "h": 77,
+            "position": "fixed",
+            "tag": "div",
+            "top": 823,
+            "visible": true,
+            "w": 1440,
+            "x": 0,
+            "y": 823
+          }
+        ],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 900,
+          "w": 1440
+        }
+      },
+      "rejected": {
+        "banner": null,
+        "cta": null,
+        "document": {
+          "h": 940,
+          "scrollWidth": 1440
+        },
+        "h1": {
+          "bottom": 173,
+          "display": "block",
+          "h": 40,
+          "position": "static",
+          "top": 133,
+          "visible": true,
+          "w": 1152,
+          "x": 144,
+          "y": 133
+        },
+        "header": {
+          "bottom": 69,
+          "display": "block",
+          "h": 69,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 725,
+          "display": "block",
+          "h": 656,
+          "position": "static",
+          "top": 69,
+          "visible": true,
+          "w": 1200,
+          "x": 120,
+          "y": 69
+        },
+        "horizontalScroll": false,
+        "pinned": [],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 900,
+          "w": 1440
+        }
+      }
+    },
+    "chromium/1440x900/legal-privacidad": {
+      "first-visit": {
+        "banner": {
+          "bottom": 900,
+          "display": "block",
+          "h": 77,
+          "position": "fixed",
+          "top": 823,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 823
+        },
+        "bannerPresent": true,
+        "cta": null,
+        "document": {
+          "h": 1437,
+          "scrollWidth": 1440
+        },
+        "h1": {
+          "bottom": 173,
+          "display": "block",
+          "h": 40,
+          "position": "static",
+          "top": 133,
+          "visible": true,
+          "w": 1152,
+          "x": 144,
+          "y": 133
+        },
+        "header": {
+          "bottom": 69,
+          "display": "block",
+          "h": 69,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1145,
+          "display": "block",
+          "h": 1076,
+          "position": "static",
+          "top": 69,
+          "visible": true,
+          "w": 1200,
+          "x": 120,
+          "y": 69
+        },
+        "horizontalScroll": false,
+        "pinned": [
+          {
+            "bottom": 900,
+            "cls": "fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--b",
+            "display": "block",
+            "h": 77,
+            "position": "fixed",
+            "tag": "div",
+            "top": 823,
+            "visible": true,
+            "w": 1440,
+            "x": 0,
+            "y": 823
+          }
+        ],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 900,
+          "w": 1440
+        }
+      },
+      "rejected": {
+        "banner": null,
+        "cta": null,
+        "document": {
+          "h": 1360,
+          "scrollWidth": 1440
+        },
+        "h1": {
+          "bottom": 173,
+          "display": "block",
+          "h": 40,
+          "position": "static",
+          "top": 133,
+          "visible": true,
+          "w": 1152,
+          "x": 144,
+          "y": 133
+        },
+        "header": {
+          "bottom": 69,
+          "display": "block",
+          "h": 69,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1145,
+          "display": "block",
+          "h": 1076,
+          "position": "static",
+          "top": 69,
+          "visible": true,
+          "w": 1200,
+          "x": 120,
+          "y": 69
+        },
+        "horizontalScroll": false,
+        "pinned": [],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 900,
+          "w": 1440
+        }
+      }
+    },
+    "chromium/1440x900/legal-terminos": {
+      "first-visit": {
+        "banner": {
+          "bottom": 900,
+          "display": "block",
+          "h": 77,
+          "position": "fixed",
+          "top": 823,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 823
+        },
+        "bannerPresent": true,
+        "cta": null,
+        "document": {
+          "h": 1325,
+          "scrollWidth": 1440
+        },
+        "h1": {
+          "bottom": 173,
+          "display": "block",
+          "h": 40,
+          "position": "static",
+          "top": 133,
+          "visible": true,
+          "w": 1152,
+          "x": 144,
+          "y": 133
+        },
+        "header": {
+          "bottom": 69,
+          "display": "block",
+          "h": 69,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1033,
+          "display": "block",
+          "h": 964,
+          "position": "static",
+          "top": 69,
+          "visible": true,
+          "w": 1200,
+          "x": 120,
+          "y": 69
+        },
+        "horizontalScroll": false,
+        "pinned": [
+          {
+            "bottom": 900,
+            "cls": "fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--b",
+            "display": "block",
+            "h": 77,
+            "position": "fixed",
+            "tag": "div",
+            "top": 823,
+            "visible": true,
+            "w": 1440,
+            "x": 0,
+            "y": 823
+          }
+        ],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 900,
+          "w": 1440
+        }
+      },
+      "rejected": {
+        "banner": null,
+        "cta": null,
+        "document": {
+          "h": 1248,
+          "scrollWidth": 1440
+        },
+        "h1": {
+          "bottom": 173,
+          "display": "block",
+          "h": 40,
+          "position": "static",
+          "top": 133,
+          "visible": true,
+          "w": 1152,
+          "x": 144,
+          "y": 133
+        },
+        "header": {
+          "bottom": 69,
+          "display": "block",
+          "h": 69,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1033,
+          "display": "block",
+          "h": 964,
+          "position": "static",
+          "top": 69,
+          "visible": true,
+          "w": 1200,
+          "x": 120,
+          "y": 69
+        },
+        "horizontalScroll": false,
+        "pinned": [],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 900,
+          "w": 1440
+        }
+      }
+    },
+    "chromium/1440x900/recuperar": {
+      "first-visit": {
+        "banner": {
+          "bottom": 900,
+          "display": "block",
+          "h": 77,
+          "position": "fixed",
+          "top": 823,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 823
+        },
+        "bannerPresent": true,
+        "cta": {
+          "bottom": 385,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 341,
+          "visible": true,
+          "w": 448,
+          "x": 144,
+          "y": 341
+        },
+        "document": {
+          "h": 1097,
+          "scrollWidth": 1440
+        },
+        "h1": {
+          "bottom": 173,
+          "display": "block",
+          "h": 40,
+          "position": "static",
+          "top": 133,
+          "visible": true,
+          "w": 1152,
+          "x": 144,
+          "y": 133
+        },
+        "header": {
+          "bottom": 69,
+          "display": "block",
+          "h": 69,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 805,
+          "display": "block",
+          "h": 736,
+          "position": "static",
+          "top": 69,
+          "visible": true,
+          "w": 1200,
+          "x": 120,
+          "y": 69
+        },
+        "horizontalScroll": false,
+        "pinned": [
+          {
+            "bottom": 900,
+            "cls": "fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--b",
+            "display": "block",
+            "h": 77,
+            "position": "fixed",
+            "tag": "div",
+            "top": 823,
+            "visible": true,
+            "w": 1440,
+            "x": 0,
+            "y": 823
+          }
+        ],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 900,
+          "w": 1440
+        }
+      },
+      "rejected": {
+        "banner": null,
+        "cta": {
+          "bottom": 385,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 341,
+          "visible": true,
+          "w": 448,
+          "x": 144,
+          "y": 341
+        },
+        "document": {
+          "h": 1020,
+          "scrollWidth": 1440
+        },
+        "h1": {
+          "bottom": 173,
+          "display": "block",
+          "h": 40,
+          "position": "static",
+          "top": 133,
+          "visible": true,
+          "w": 1152,
+          "x": 144,
+          "y": 133
+        },
+        "header": {
+          "bottom": 69,
+          "display": "block",
+          "h": 69,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 1440,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 805,
+          "display": "block",
+          "h": 736,
+          "position": "static",
+          "top": 69,
+          "visible": true,
+          "w": 1200,
+          "x": 120,
+          "y": 69
+        },
+        "horizontalScroll": false,
+        "pinned": [],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 900,
+          "w": 1440
+        }
+      }
+    },
+    "chromium/360x640/gallery": {
+      "first-visit": {
+        "banner": {
+          "bottom": 640,
+          "display": "block",
+          "h": 173,
+          "position": "fixed",
+          "top": 467,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 467
+        },
+        "bannerPresent": true,
+        "cta": null,
+        "document": {
+          "h": 1051,
+          "scrollWidth": 360
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 312,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 525,
+          "display": "block",
+          "h": 380,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [
+          {
+            "bottom": 640,
+            "cls": "fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--b",
+            "display": "block",
+            "h": 173,
+            "position": "fixed",
+            "tag": "div",
+            "top": 467,
+            "visible": true,
+            "w": 360,
+            "x": 0,
+            "y": 467
+          }
+        ],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 640,
+          "w": 360
+        }
+      },
+      "rejected": {
+        "banner": null,
+        "cta": null,
+        "document": {
+          "h": 878,
+          "scrollWidth": 360
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 312,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 525,
+          "display": "block",
+          "h": 380,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 640,
+          "w": 360
+        }
+      }
+    },
+    "chromium/360x640/home": {
+      "first-visit": {
+        "banner": {
+          "bottom": 640,
+          "display": "block",
+          "h": 173,
+          "position": "fixed",
+          "top": 467,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 467
+        },
+        "bannerPresent": true,
+        "cta": {
+          "bottom": 1336,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 1292,
+          "visible": true,
+          "w": 264,
+          "x": 48,
+          "y": 1292
+        },
+        "document": {
+          "h": 3629,
+          "scrollWidth": 360
+        },
+        "h1": {
+          "bottom": 332,
+          "display": "block",
+          "h": 155,
+          "position": "static",
+          "top": 177,
+          "visible": true,
+          "w": 312,
+          "x": 24,
+          "y": 177
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1360,
+          "display": "block",
+          "h": 1215,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [
+          {
+            "bottom": 640,
+            "cls": "fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--b",
+            "display": "block",
+            "h": 173,
+            "position": "fixed",
+            "tag": "div",
+            "top": 467,
+            "visible": true,
+            "w": 360,
+            "x": 0,
+            "y": 467
+          }
+        ],
+        "sticky": null,
+        "uploader": {
+          "bottom": 1276,
+          "display": "block",
+          "h": 172,
+          "position": "static",
+          "top": 1104,
+          "visible": true,
+          "w": 264,
+          "x": 48,
+          "y": 1104
+        },
+        "viewport": {
+          "dpr": 1,
+          "h": 640,
+          "w": 360
+        }
+      },
+      "rejected": {
+        "banner": null,
+        "cta": {
+          "bottom": 1336,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 1292,
+          "visible": true,
+          "w": 264,
+          "x": 48,
+          "y": 1292
+        },
+        "document": {
+          "h": 3456,
+          "scrollWidth": 360
+        },
+        "h1": {
+          "bottom": 332,
+          "display": "block",
+          "h": 155,
+          "position": "static",
+          "top": 177,
+          "visible": true,
+          "w": 312,
+          "x": 24,
+          "y": 177
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1360,
+          "display": "block",
+          "h": 1215,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [],
+        "sticky": null,
+        "uploader": {
+          "bottom": 1276,
+          "display": "block",
+          "h": 172,
+          "position": "static",
+          "top": 1104,
+          "visible": true,
+          "w": 264,
+          "x": 48,
+          "y": 1104
+        },
+        "viewport": {
+          "dpr": 1,
+          "h": 640,
+          "w": 360
+        }
+      },
+      "upload-chosen": {
+        "alerts": [],
+        "banner": null,
+        "cta": {
+          "bottom": 1316,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 1272,
+          "visible": true,
+          "w": 264,
+          "x": 48,
+          "y": 1272
+        },
+        "ctaDisabled": false,
+        "document": {
+          "h": 3436,
+          "scrollWidth": 360
+        },
+        "h1": {
+          "bottom": 332,
+          "display": "block",
+          "h": 155,
+          "position": "static",
+          "top": 177,
+          "visible": true,
+          "w": 312,
+          "x": 24,
+          "y": 177
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1340,
+          "display": "block",
+          "h": 1195,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "label": "2 de 4 elegidas | Elegir otras fotos | selfie-0.jpg \u00b7 selfie-1.jpg",
+        "pinned": [],
+        "status": [],
+        "sticky": null,
+        "uploader": {
+          "bottom": 1256,
+          "display": "block",
+          "h": 152,
+          "position": "static",
+          "top": 1104,
+          "visible": true,
+          "w": 264,
+          "x": 48,
+          "y": 1104
+        },
+        "viewport": {
+          "dpr": 1,
+          "h": 640,
+          "w": 360
+        }
+      },
+      "upload-invalid": {
+        "alerts": [],
+        "banner": null,
+        "cta": {
+          "bottom": 1316,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 1272,
+          "visible": true,
+          "w": 264,
+          "x": 48,
+          "y": 1272
+        },
+        "ctaDisabled": false,
+        "document": {
+          "h": 3436,
+          "scrollWidth": 360
+        },
+        "h1": {
+          "bottom": 332,
+          "display": "block",
+          "h": 155,
+          "position": "static",
+          "top": 177,
+          "visible": true,
+          "w": 312,
+          "x": 24,
+          "y": 177
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1340,
+          "display": "block",
+          "h": 1195,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "label": "1 de 4 elegidas | Elegir otras fotos | not-an-image.jpg",
+        "pinned": [],
+        "status": [],
+        "sticky": null,
+        "uploader": {
+          "bottom": 1256,
+          "display": "block",
+          "h": 152,
+          "position": "static",
+          "top": 1104,
+          "visible": true,
+          "w": 264,
+          "x": 48,
+          "y": 1104
+        },
+        "viewport": {
+          "dpr": 1,
+          "h": 640,
+          "w": 360
+        }
+      },
+      "upload-invalid-sent": {
+        "alerts": [
+          "Alguno de los archivos no es una imagen."
+        ],
+        "banner": null,
+        "cta": {
+          "bottom": 1372,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 1328,
+          "visible": true,
+          "w": 264,
+          "x": 48,
+          "y": 354
+        },
+        "ctaDisabled": false,
+        "document": {
+          "h": 3492,
+          "scrollWidth": 360
+        },
+        "h1": {
+          "bottom": 332,
+          "display": "block",
+          "h": 155,
+          "position": "static",
+          "top": 177,
+          "visible": true,
+          "w": 312,
+          "x": 24,
+          "y": -797
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": -974
+        },
+        "hero": {
+          "bottom": 1396,
+          "display": "block",
+          "h": 1251,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": -829
+        },
+        "horizontalScroll": false,
+        "label": "1 de 4 elegidas | Elegir otras fotos | not-an-image.jpg",
+        "pinned": [],
+        "status": [],
+        "sticky": null,
+        "uploader": {
+          "bottom": 1256,
+          "display": "block",
+          "h": 152,
+          "position": "static",
+          "top": 1104,
+          "visible": true,
+          "w": 264,
+          "x": 48,
+          "y": 130
+        },
+        "viewport": {
+          "dpr": 1,
+          "h": 640,
+          "w": 360
+        }
+      },
+      "upload-too-many": {
+        "alerts": [],
+        "banner": null,
+        "cta": {
+          "bottom": 1336,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 1292,
+          "visible": true,
+          "w": 264,
+          "x": 48,
+          "y": 318
+        },
+        "ctaDisabled": false,
+        "document": {
+          "h": 3456,
+          "scrollWidth": 360
+        },
+        "h1": {
+          "bottom": 332,
+          "display": "block",
+          "h": 155,
+          "position": "static",
+          "top": 177,
+          "visible": true,
+          "w": 312,
+          "x": 24,
+          "y": -797
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": -974
+        },
+        "hero": {
+          "bottom": 1360,
+          "display": "block",
+          "h": 1215,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": -829
+        },
+        "horizontalScroll": false,
+        "label": "5 de 4 elegidas | Elegir otras fotos | selfie-0.jpg \u00b7 selfie-1.jpg \u00b7 selfie-2.jpg \u00b7 selfie-3.jpg \u00b7 selfie-4.jpg",
+        "pinned": [],
+        "status": [],
+        "sticky": null,
+        "uploader": {
+          "bottom": 1276,
+          "display": "block",
+          "h": 172,
+          "position": "static",
+          "top": 1104,
+          "visible": true,
+          "w": 264,
+          "x": 48,
+          "y": 130
+        },
+        "viewport": {
+          "dpr": 1,
+          "h": 640,
+          "w": 360
+        }
+      }
+    },
+    "chromium/360x640/legal-aviso": {
+      "first-visit": {
+        "banner": {
+          "bottom": 640,
+          "display": "block",
+          "h": 173,
+          "position": "fixed",
+          "top": 467,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 467
+        },
+        "bannerPresent": true,
+        "cta": null,
+        "document": {
+          "h": 1747,
+          "scrollWidth": 360
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 312,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1221,
+          "display": "block",
+          "h": 1076,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [
+          {
+            "bottom": 640,
+            "cls": "fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--b",
+            "display": "block",
+            "h": 173,
+            "position": "fixed",
+            "tag": "div",
+            "top": 467,
+            "visible": true,
+            "w": 360,
+            "x": 0,
+            "y": 467
+          }
+        ],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 640,
+          "w": 360
+        }
+      },
+      "rejected": {
+        "banner": null,
+        "cta": null,
+        "document": {
+          "h": 1574,
+          "scrollWidth": 360
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 312,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1221,
+          "display": "block",
+          "h": 1076,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 640,
+          "w": 360
+        }
+      }
+    },
+    "chromium/360x640/legal-cookies": {
+      "first-visit": {
+        "banner": {
+          "bottom": 640,
+          "display": "block",
+          "h": 173,
+          "position": "fixed",
+          "top": 467,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 467
+        },
+        "bannerPresent": true,
+        "cta": null,
+        "document": {
+          "h": 1523,
+          "scrollWidth": 360
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 312,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 997,
+          "display": "block",
+          "h": 852,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [
+          {
+            "bottom": 640,
+            "cls": "fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--b",
+            "display": "block",
+            "h": 173,
+            "position": "fixed",
+            "tag": "div",
+            "top": 467,
+            "visible": true,
+            "w": 360,
+            "x": 0,
+            "y": 467
+          }
+        ],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 640,
+          "w": 360
+        }
+      },
+      "rejected": {
+        "banner": null,
+        "cta": null,
+        "document": {
+          "h": 1350,
+          "scrollWidth": 360
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 312,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 997,
+          "display": "block",
+          "h": 852,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 640,
+          "w": 360
+        }
+      }
+    },
+    "chromium/360x640/legal-privacidad": {
+      "first-visit": {
+        "banner": {
+          "bottom": 640,
+          "display": "block",
+          "h": 173,
+          "position": "fixed",
+          "top": 467,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 467
+        },
+        "bannerPresent": true,
+        "cta": null,
+        "document": {
+          "h": 2135,
+          "scrollWidth": 360
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 312,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1609,
+          "display": "block",
+          "h": 1464,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [
+          {
+            "bottom": 640,
+            "cls": "fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--b",
+            "display": "block",
+            "h": 173,
+            "position": "fixed",
+            "tag": "div",
+            "top": 467,
+            "visible": true,
+            "w": 360,
+            "x": 0,
+            "y": 467
+          }
+        ],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 640,
+          "w": 360
+        }
+      },
+      "rejected": {
+        "banner": null,
+        "cta": null,
+        "document": {
+          "h": 1962,
+          "scrollWidth": 360
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 312,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1609,
+          "display": "block",
+          "h": 1464,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 640,
+          "w": 360
+        }
+      }
+    },
+    "chromium/360x640/legal-terminos": {
+      "first-visit": {
+        "banner": {
+          "bottom": 640,
+          "display": "block",
+          "h": 173,
+          "position": "fixed",
+          "top": 467,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 467
+        },
+        "bannerPresent": true,
+        "cta": null,
+        "document": {
+          "h": 1951,
+          "scrollWidth": 360
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 312,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1425,
+          "display": "block",
+          "h": 1280,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [
+          {
+            "bottom": 640,
+            "cls": "fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--b",
+            "display": "block",
+            "h": 173,
+            "position": "fixed",
+            "tag": "div",
+            "top": 467,
+            "visible": true,
+            "w": 360,
+            "x": 0,
+            "y": 467
+          }
+        ],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 640,
+          "w": 360
+        }
+      },
+      "rejected": {
+        "banner": null,
+        "cta": null,
+        "document": {
+          "h": 1778,
+          "scrollWidth": 360
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 312,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1425,
+          "display": "block",
+          "h": 1280,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 640,
+          "w": 360
+        }
+      }
+    },
+    "chromium/360x640/recuperar": {
+      "first-visit": {
+        "banner": {
+          "bottom": 640,
+          "display": "block",
+          "h": 173,
+          "position": "fixed",
+          "top": 467,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 467
+        },
+        "bannerPresent": true,
+        "cta": {
+          "bottom": 489,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 445,
+          "visible": true,
+          "w": 312,
+          "x": 24,
+          "y": 445
+        },
+        "document": {
+          "h": 1739,
+          "scrollWidth": 360
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 312,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1213,
+          "display": "block",
+          "h": 1068,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [
+          {
+            "bottom": 640,
+            "cls": "fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--b",
+            "display": "block",
+            "h": 173,
+            "position": "fixed",
+            "tag": "div",
+            "top": 467,
+            "visible": true,
+            "w": 360,
+            "x": 0,
+            "y": 467
+          }
+        ],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 640,
+          "w": 360
+        }
+      },
+      "rejected": {
+        "banner": null,
+        "cta": {
+          "bottom": 489,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 445,
+          "visible": true,
+          "w": 312,
+          "x": 24,
+          "y": 445
+        },
+        "document": {
+          "h": 1566,
+          "scrollWidth": 360
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 312,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1213,
+          "display": "block",
+          "h": 1068,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 360,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 640,
+          "w": 360
+        }
+      }
+    },
+    "chromium/390x844/gallery": {
+      "first-visit": {
+        "banner": {
+          "bottom": 844,
+          "display": "block",
+          "h": 153,
+          "position": "fixed",
+          "top": 691,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 691
+        },
+        "bannerPresent": true,
+        "cta": null,
+        "document": {
+          "h": 1007,
+          "scrollWidth": 390
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 342,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 501,
+          "display": "block",
+          "h": 356,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [
+          {
+            "bottom": 844,
+            "cls": "fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--b",
+            "display": "block",
+            "h": 153,
+            "position": "fixed",
+            "tag": "div",
+            "top": 691,
+            "visible": true,
+            "w": 390,
+            "x": 0,
+            "y": 691
+          }
+        ],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 844,
+          "w": 390
+        }
+      },
+      "rejected": {
+        "banner": null,
+        "cta": null,
+        "document": {
+          "h": 854,
+          "scrollWidth": 390
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 342,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 501,
+          "display": "block",
+          "h": 356,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 844,
+          "w": 390
+        }
+      }
+    },
+    "chromium/390x844/home": {
+      "first-visit": {
+        "banner": {
+          "bottom": 844,
+          "display": "block",
+          "h": 153,
+          "position": "fixed",
+          "top": 691,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 691
+        },
+        "bannerPresent": true,
+        "cta": {
+          "bottom": 1327.25,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 1283.25,
+          "visible": true,
+          "w": 294,
+          "x": 48,
+          "y": 1283.25
+        },
+        "document": {
+          "h": 3638,
+          "scrollWidth": 390
+        },
+        "h1": {
+          "bottom": 293.25,
+          "display": "block",
+          "h": 116.25,
+          "position": "static",
+          "top": 177,
+          "visible": true,
+          "w": 342,
+          "x": 24,
+          "y": 177
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1351.25,
+          "display": "block",
+          "h": 1206.25,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [
+          {
+            "bottom": 844,
+            "cls": "fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--b",
+            "display": "block",
+            "h": 153,
+            "position": "fixed",
+            "tag": "div",
+            "top": 691,
+            "visible": true,
+            "w": 390,
+            "x": 0,
+            "y": 691
+          }
+        ],
+        "sticky": null,
+        "uploader": {
+          "bottom": 1267.25,
+          "display": "block",
+          "h": 172,
+          "position": "static",
+          "top": 1095.25,
+          "visible": true,
+          "w": 294,
+          "x": 48,
+          "y": 1095.25
+        },
+        "viewport": {
+          "dpr": 1,
+          "h": 844,
+          "w": 390
+        }
+      },
+      "rejected": {
+        "banner": null,
+        "cta": {
+          "bottom": 1327.25,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 1283.25,
+          "visible": true,
+          "w": 294,
+          "x": 48,
+          "y": 1283.25
+        },
+        "document": {
+          "h": 3485,
+          "scrollWidth": 390
+        },
+        "h1": {
+          "bottom": 293.25,
+          "display": "block",
+          "h": 116.25,
+          "position": "static",
+          "top": 177,
+          "visible": true,
+          "w": 342,
+          "x": 24,
+          "y": 177
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1351.25,
+          "display": "block",
+          "h": 1206.25,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [],
+        "sticky": null,
+        "uploader": {
+          "bottom": 1267.25,
+          "display": "block",
+          "h": 172,
+          "position": "static",
+          "top": 1095.25,
+          "visible": true,
+          "w": 294,
+          "x": 48,
+          "y": 1095.25
+        },
+        "viewport": {
+          "dpr": 1,
+          "h": 844,
+          "w": 390
+        }
+      },
+      "upload-chosen": {
+        "alerts": [],
+        "banner": null,
+        "cta": {
+          "bottom": 1307.25,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 1263.25,
+          "visible": true,
+          "w": 294,
+          "x": 48,
+          "y": 1263.25
+        },
+        "ctaDisabled": false,
+        "document": {
+          "h": 3465,
+          "scrollWidth": 390
+        },
+        "h1": {
+          "bottom": 293.25,
+          "display": "block",
+          "h": 116.25,
+          "position": "static",
+          "top": 177,
+          "visible": true,
+          "w": 342,
+          "x": 24,
+          "y": 177
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1331.25,
+          "display": "block",
+          "h": 1186.25,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "label": "2 de 4 elegidas | Elegir otras fotos | selfie-0.jpg \u00b7 selfie-1.jpg",
+        "pinned": [],
+        "status": [],
+        "sticky": null,
+        "uploader": {
+          "bottom": 1247.25,
+          "display": "block",
+          "h": 152,
+          "position": "static",
+          "top": 1095.25,
+          "visible": true,
+          "w": 294,
+          "x": 48,
+          "y": 1095.25
+        },
+        "viewport": {
+          "dpr": 1,
+          "h": 844,
+          "w": 390
+        }
+      },
+      "upload-invalid": {
+        "alerts": [],
+        "banner": null,
+        "cta": {
+          "bottom": 1307.25,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 1263.25,
+          "visible": true,
+          "w": 294,
+          "x": 48,
+          "y": 1263.25
+        },
+        "ctaDisabled": false,
+        "document": {
+          "h": 3465,
+          "scrollWidth": 390
+        },
+        "h1": {
+          "bottom": 293.25,
+          "display": "block",
+          "h": 116.25,
+          "position": "static",
+          "top": 177,
+          "visible": true,
+          "w": 342,
+          "x": 24,
+          "y": 177
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1331.25,
+          "display": "block",
+          "h": 1186.25,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "label": "1 de 4 elegidas | Elegir otras fotos | not-an-image.jpg",
+        "pinned": [],
+        "status": [],
+        "sticky": null,
+        "uploader": {
+          "bottom": 1247.25,
+          "display": "block",
+          "h": 152,
+          "position": "static",
+          "top": 1095.25,
+          "visible": true,
+          "w": 294,
+          "x": 48,
+          "y": 1095.25
+        },
+        "viewport": {
+          "dpr": 1,
+          "h": 844,
+          "w": 390
+        }
+      },
+      "upload-invalid-sent": {
+        "alerts": [
+          "Alguno de los archivos no es una imagen."
+        ],
+        "banner": null,
+        "cta": {
+          "bottom": 1343.25,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 1299.25,
+          "visible": true,
+          "w": 294,
+          "x": 48,
+          "y": 436.25
+        },
+        "ctaDisabled": false,
+        "document": {
+          "h": 3501,
+          "scrollWidth": 390
+        },
+        "h1": {
+          "bottom": 293.25,
+          "display": "block",
+          "h": 116.25,
+          "position": "static",
+          "top": 177,
+          "visible": true,
+          "w": 342,
+          "x": 24,
+          "y": -686
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": -863
+        },
+        "hero": {
+          "bottom": 1367.25,
+          "display": "block",
+          "h": 1222.25,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": -718
+        },
+        "horizontalScroll": false,
+        "label": "1 de 4 elegidas | Elegir otras fotos | not-an-image.jpg",
+        "pinned": [],
+        "status": [],
+        "sticky": null,
+        "uploader": {
+          "bottom": 1247.25,
+          "display": "block",
+          "h": 152,
+          "position": "static",
+          "top": 1095.25,
+          "visible": true,
+          "w": 294,
+          "x": 48,
+          "y": 232.25
+        },
+        "viewport": {
+          "dpr": 1,
+          "h": 844,
+          "w": 390
+        }
+      },
+      "upload-too-many": {
+        "alerts": [],
+        "banner": null,
+        "cta": {
+          "bottom": 1327.25,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 1283.25,
+          "visible": true,
+          "w": 294,
+          "x": 48,
+          "y": 420.25
+        },
+        "ctaDisabled": false,
+        "document": {
+          "h": 3485,
+          "scrollWidth": 390
+        },
+        "h1": {
+          "bottom": 293.25,
+          "display": "block",
+          "h": 116.25,
+          "position": "static",
+          "top": 177,
+          "visible": true,
+          "w": 342,
+          "x": 24,
+          "y": -686
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": -863
+        },
+        "hero": {
+          "bottom": 1351.25,
+          "display": "block",
+          "h": 1206.25,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": -718
+        },
+        "horizontalScroll": false,
+        "label": "5 de 4 elegidas | Elegir otras fotos | selfie-0.jpg \u00b7 selfie-1.jpg \u00b7 selfie-2.jpg \u00b7 selfie-3.jpg \u00b7 selfie-4.jpg",
+        "pinned": [],
+        "status": [],
+        "sticky": null,
+        "uploader": {
+          "bottom": 1267.25,
+          "display": "block",
+          "h": 172,
+          "position": "static",
+          "top": 1095.25,
+          "visible": true,
+          "w": 294,
+          "x": 48,
+          "y": 232.25
+        },
+        "viewport": {
+          "dpr": 1,
+          "h": 844,
+          "w": 390
+        }
+      }
+    },
+    "chromium/390x844/legal-aviso": {
+      "first-visit": {
+        "banner": {
+          "bottom": 844,
+          "display": "block",
+          "h": 153,
+          "position": "fixed",
+          "top": 691,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 691
+        },
+        "bannerPresent": true,
+        "cta": null,
+        "document": {
+          "h": 1703,
+          "scrollWidth": 390
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 342,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1197,
+          "display": "block",
+          "h": 1052,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [
+          {
+            "bottom": 844,
+            "cls": "fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--b",
+            "display": "block",
+            "h": 153,
+            "position": "fixed",
+            "tag": "div",
+            "top": 691,
+            "visible": true,
+            "w": 390,
+            "x": 0,
+            "y": 691
+          }
+        ],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 844,
+          "w": 390
+        }
+      },
+      "rejected": {
+        "banner": null,
+        "cta": null,
+        "document": {
+          "h": 1550,
+          "scrollWidth": 390
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 342,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1197,
+          "display": "block",
+          "h": 1052,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 844,
+          "w": 390
+        }
+      }
+    },
+    "chromium/390x844/legal-cookies": {
+      "first-visit": {
+        "banner": {
+          "bottom": 844,
+          "display": "block",
+          "h": 153,
+          "position": "fixed",
+          "top": 691,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 691
+        },
+        "bannerPresent": true,
+        "cta": null,
+        "document": {
+          "h": 1503,
+          "scrollWidth": 390
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 342,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 997,
+          "display": "block",
+          "h": 852,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [
+          {
+            "bottom": 844,
+            "cls": "fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--b",
+            "display": "block",
+            "h": 153,
+            "position": "fixed",
+            "tag": "div",
+            "top": 691,
+            "visible": true,
+            "w": 390,
+            "x": 0,
+            "y": 691
+          }
+        ],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 844,
+          "w": 390
+        }
+      },
+      "rejected": {
+        "banner": null,
+        "cta": null,
+        "document": {
+          "h": 1350,
+          "scrollWidth": 390
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 342,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 997,
+          "display": "block",
+          "h": 852,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 844,
+          "w": 390
+        }
+      }
+    },
+    "chromium/390x844/legal-privacidad": {
+      "first-visit": {
+        "banner": {
+          "bottom": 844,
+          "display": "block",
+          "h": 153,
+          "position": "fixed",
+          "top": 691,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 691
+        },
+        "bannerPresent": true,
+        "cta": null,
+        "document": {
+          "h": 2067,
+          "scrollWidth": 390
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 342,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1561,
+          "display": "block",
+          "h": 1416,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [
+          {
+            "bottom": 844,
+            "cls": "fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--b",
+            "display": "block",
+            "h": 153,
+            "position": "fixed",
+            "tag": "div",
+            "top": 691,
+            "visible": true,
+            "w": 390,
+            "x": 0,
+            "y": 691
+          }
+        ],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 844,
+          "w": 390
+        }
+      },
+      "rejected": {
+        "banner": null,
+        "cta": null,
+        "document": {
+          "h": 1914,
+          "scrollWidth": 390
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 342,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1561,
+          "display": "block",
+          "h": 1416,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 844,
+          "w": 390
+        }
+      }
+    },
+    "chromium/390x844/legal-terminos": {
+      "first-visit": {
+        "banner": {
+          "bottom": 844,
+          "display": "block",
+          "h": 153,
+          "position": "fixed",
+          "top": 691,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 691
+        },
+        "bannerPresent": true,
+        "cta": null,
+        "document": {
+          "h": 1883,
+          "scrollWidth": 390
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 342,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1377,
+          "display": "block",
+          "h": 1232,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [
+          {
+            "bottom": 844,
+            "cls": "fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--b",
+            "display": "block",
+            "h": 153,
+            "position": "fixed",
+            "tag": "div",
+            "top": 691,
+            "visible": true,
+            "w": 390,
+            "x": 0,
+            "y": 691
+          }
+        ],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 844,
+          "w": 390
+        }
+      },
+      "rejected": {
+        "banner": null,
+        "cta": null,
+        "document": {
+          "h": 1730,
+          "scrollWidth": 390
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 342,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1377,
+          "display": "block",
+          "h": 1232,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 844,
+          "w": 390
+        }
+      }
+    },
+    "chromium/390x844/recuperar": {
+      "first-visit": {
+        "banner": {
+          "bottom": 844,
+          "display": "block",
+          "h": 153,
+          "position": "fixed",
+          "top": 691,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 691
+        },
+        "bannerPresent": true,
+        "cta": {
+          "bottom": 465,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 421,
+          "visible": true,
+          "w": 342,
+          "x": 24,
+          "y": 421
+        },
+        "document": {
+          "h": 1671,
+          "scrollWidth": 390
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 342,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1165,
+          "display": "block",
+          "h": 1020,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [
+          {
+            "bottom": 844,
+            "cls": "fixed inset-x-0 bottom-0 z-50 border-t border-[color:var(--b",
+            "display": "block",
+            "h": 153,
+            "position": "fixed",
+            "tag": "div",
+            "top": 691,
+            "visible": true,
+            "w": 390,
+            "x": 0,
+            "y": 691
+          }
+        ],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 844,
+          "w": 390
+        }
+      },
+      "rejected": {
+        "banner": null,
+        "cta": {
+          "bottom": 465,
+          "display": "flex",
+          "h": 44,
+          "position": "static",
+          "top": 421,
+          "visible": true,
+          "w": 342,
+          "x": 24,
+          "y": 421
+        },
+        "document": {
+          "h": 1518,
+          "scrollWidth": 390
+        },
+        "h1": {
+          "bottom": 229,
+          "display": "block",
+          "h": 36,
+          "position": "static",
+          "top": 193,
+          "visible": true,
+          "w": 342,
+          "x": 24,
+          "y": 193
+        },
+        "header": {
+          "bottom": 145,
+          "display": "block",
+          "h": 145,
+          "position": "static",
+          "top": 0,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 0
+        },
+        "hero": {
+          "bottom": 1165,
+          "display": "block",
+          "h": 1020,
+          "position": "static",
+          "top": 145,
+          "visible": true,
+          "w": 390,
+          "x": 0,
+          "y": 145
+        },
+        "horizontalScroll": false,
+        "pinned": [],
+        "sticky": null,
+        "uploader": null,
+        "viewport": {
+          "dpr": 1,
+          "h": 844,
+          "w": 390
+        }
+      }
+    }
+  },
+  "sheets": [
+    "sheet--chromium--1440x900.png",
+    "sheet--chromium--360x640.png",
+    "sheet--chromium--390x844.png"
+  ]
+}

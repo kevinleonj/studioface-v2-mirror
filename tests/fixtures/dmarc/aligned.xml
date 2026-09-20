@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- Built from the RFC 7489 Appendix C schema, verified 18 Sep 2026. Element names and
+     nesting are quoted from the RFC, not recalled: feedback / report_metadata /
+     policy_published / record{row{source_ip,count,policy_evaluated{disposition,dkim,spf}},
+     identifiers{header_from,envelope_from}, auth_results{dkim{domain,result,selector},
+     spf{domain,result}}}.
+
+     The passing case: two Amazon SES sources, which is what Resend sends through, both
+     with dkim=pass and spf=pass and nothing quarantined. -->
+<feedback>
+  <report_metadata>
+    <org_name>google.com</org_name>
+    <email>noreply-dmarc-support@google.com</email>
+    <report_id>4512099120294967295</report_id>
+    <date_range>
+      <begin>1789430400</begin>
+      <end>1789516800</end>
+    </date_range>
+  </report_metadata>
+  <policy_published>
+    <domain>studioface.app</domain>
+    <adkim>r</adkim>
+    <aspf>r</aspf>
+    <p>quarantine</p>
+    <sp>quarantine</sp>
+    <pct>100</pct>
+  </policy_published>
+  <record>
+    <row>
+      <source_ip>54.240.8.31</source_ip>
+      <count>12</count>
+      <policy_evaluated>
+        <disposition>none</disposition>
+        <dkim>pass</dkim>
+        <spf>pass</spf>
+      </policy_evaluated>
+    </row>
+    <identifiers>
+      <header_from>studioface.app</header_from>
+      <envelope_from>studioface.app</envelope_from>
+    </identifiers>
+    <auth_results>
+      <dkim>
+        <domain>studioface.app</domain>
+        <result>pass</result>
+        <selector>resend</selector>
+      </dkim>
+      <spf>
+        <domain>studioface.app</domain>
+        <result>pass</result>
+      </spf>
+    </auth_results>
+  </record>
+  <record>
+    <row>
+      <source_ip>54.240.8.44</source_ip>
+      <count>3</count>
+      <policy_evaluated>
+        <disposition>none</disposition>
+        <dkim>pass</dkim>
+        <spf>pass</spf>
+      </policy_evaluated>
+    </row>
+    <identifiers>
+      <header_from>studioface.app</header_from>
+    </identifiers>
+    <auth_results>
+      <dkim>
+        <domain>studioface.app</domain>
+        <result>pass</result>
+        <selector>resend</selector>
+      </dkim>
+      <spf>
+        <domain>studioface.app</domain>
+        <result>pass</result>
+      </spf>
+    </auth_results>
+  </record>
+</feedback>

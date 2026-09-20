@@ -1,0 +1,32 @@
+<!doctype html><html lang="es-ES"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,300..600&family=Public+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f2f1ed;--fg:#141312;--pri:#c3352b;--mut:#e6e4de;--sub:#5b5853}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font-family:"Public Sans",system-ui,sans-serif}
+header{height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--fg)}
+.logo{font-family:Newsreader,serif;font-size:20px}.price{font-size:13px;color:var(--sub)}
+main{padding:16px 20px 0;max-width:1200px;margin:auto}
+h1{font-family:Newsreader,serif;font-weight:400;font-size:30px;line-height:1.08;margin:0 0 12px;letter-spacing:-.01em}
+.ba{position:relative;aspect-ratio:1/1;width:100%;max-height:42svh;overflow:hidden;border:1px solid var(--fg);border-radius:10px;--p:50%}
+.ba img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.ba .before{clip-path:inset(0 calc(100% - var(--p)) 0 0)}
+.ba .bar{position:absolute;top:0;bottom:0;left:var(--p);width:2px;background:#fff;transform:translateX(-1px);pointer-events:none}
+.ba .knob{position:absolute;top:50%;left:var(--p);width:44px;height:44px;border-radius:50%;background:#fff;border:1px solid var(--fg);transform:translate(-50%,-50%);pointer-events:none;display:grid;place-items:center;font-size:14px}
+.ba input{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:ew-resize;margin:0}
+.ba input:focus-visible ~ .knob{outline:3px solid var(--pri);outline-offset:2px}
+.tag{position:absolute;top:8px;font-size:12px;background:var(--bg);padding:2px 8px;border-radius:4px}.tag.l{left:8px}.tag.r{right:8px}
+.cta{display:flex;align-items:center;justify-content:center;height:52px;margin-top:12px;border-radius:10px;background:var(--pri);color:#fff;font-weight:600;font-size:16px;text-decoration:none}
+.micro{font-size:12.5px;color:var(--sub);margin:8px 0 0;text-align:center}
+.banner{position:fixed;left:0;right:0;bottom:0;background:var(--bg);border-top:1px solid var(--fg);padding:10px 20px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.banner p{margin:0;font-size:13px;line-height:1.35;flex:1 1 200px}.banner .b{display:flex;gap:8px;flex:1 1 100%}
+.banner button{flex:1;height:44px;border-radius:10px;border:1px solid var(--fg);background:var(--bg);font:600 14px "Public Sans";color:var(--fg)}
+@media(min-width:900px){main{display:grid;grid-template-columns:1fr 1fr;gap:48px;padding-top:40px}h1{font-size:56px}.banner .b{flex:0 0 auto}.banner button{width:120px}}
+</style></head><body>
+<header><span class="logo">StudioFace</span><span class="price">19,99 € IVA incluido</span></header>
+<main><div><h1 id="h1">Tu foto profesional para LinkedIn, en dos minutos</h1>
+<a class="cta d" id="cta-d" href="#subir" style="display:none">Ver mi prueba gratis</a></div>
+<div><div class="ba" id="ba"><img src="mujer-40-despues.jpg" alt=""><img class="before" src="mujer-40-antes.jpg" alt=""><span class="tag l">Antes</span><span class="tag r">Después</span><span class="bar"></span>
+<input type="range" min="0" max="100" value="50" aria-label="Comparar antes y después" oninput="this.parentElement.style.setProperty('--p',this.value+'%')"><span class="knob">↔</span></div>
+<a class="cta" id="cta" href="#subir">Ver mi prueba gratis</a><p class="micro">Sin registro ni tarjeta. 19,99 € solo si te gusta.</p></div></main>
+<div class="banner" id="banner"><p>Usamos cookies de medición y publicidad. <a href="#">Política de cookies</a></p><div class="b"><button>Rechazar</button><button>Aceptar</button></div></div>
+</body></html>

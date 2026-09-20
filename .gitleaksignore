@@ -1,0 +1,19 @@
+# Fingerprints gitleaks may skip, each with the reason it is not a secret.
+#
+# `gitleaks git` scans the ENTIRE history, not the commits being pushed, so a finding in
+# a commit that is already on the remote blocks every future push until it is resolved
+# here or the history is rewritten. Rewriting main to remove a published public key would
+# be a far bigger action than the finding warrants.
+#
+# 31c5fc8 — the p= value of resend._domainkey.studioface.app, quoted in HANDOFF.md while
+# writing up the DMARC work. A DKIM public key is published in DNS for every receiving
+# mail server on the internet to read; that is the entire point of it. It is high-entropy
+# base64, which is why the generic-api-key rule fires, and it is not a secret in any
+# sense. The bytes have since been removed from both HANDOFF.md and docs/verified.md,
+# which now say an RSA public key is present and leave it at that — so this entry covers
+# one historical commit and nothing going forward.
+#
+# Anything added here needs a line saying why. An allowlist without reasons is an
+# allowlist nobody can audit, and this file is the one place a real secret could be
+# waved through.
+31c5fc85a06dfcccee8ac3614d7aaf58f8476b92:HANDOFF.md:generic-api-key:838

@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="es-ES"><head><meta charset="utf-8"><title>StudioFace</title></head>
+<body>
+<h1>Tu foto de perfil profesional, revelada en dos minutos</h1>
+<!-- Outage 2, reproduced. The container is in the document and stays EMPTY, because the
+     mount effect ran before the Turnstile script defined window.turnstile and never ran
+     again. There is no input[name=cf-turnstile-response], so the token is always "" and
+     /api/preview answers 403 to every visitor. -->
+<div class="min-h-[65px]"></div>
+<button>Ver una prueba gratis</button>
+</body></html>

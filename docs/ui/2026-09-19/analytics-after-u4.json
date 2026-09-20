@@ -1,0 +1,58 @@
+{
+  "a_consentDefaults": {
+    "allFourDenied": true,
+    "configIndex": 4,
+    "defaultBeforeConfig": true,
+    "firstTwoEntries": [
+      [
+        "consent",
+        "default",
+        {
+          "ad_personalization": "denied",
+          "ad_storage": "denied",
+          "ad_user_data": "denied",
+          "analytics_storage": "denied",
+          "wait_for_update": 500
+        }
+      ],
+      [
+        "set",
+        "url_passthrough",
+        true
+      ]
+    ],
+    "waitForUpdate": 500
+  },
+  "b_collect": {
+    "collectRequests": 2,
+    "gtagLoaded": true,
+    "note": "observed",
+    "withGcsG100": 2
+  },
+  "base": "https://studioface.app",
+  "c_consentUpdate": {
+    "allFourGranted": true,
+    "pushed": true,
+    "settings": {
+      "ad_personalization": "granted",
+      "ad_storage": "granted",
+      "ad_user_data": "granted",
+      "analytics_storage": "granted"
+    }
+  },
+  "d_events": {
+    "afterAccept": [
+      "view_proof",
+      "upload_start"
+    ],
+    "deniedPhase": [
+      "view_proof",
+      "upload_start"
+    ],
+    "steps": {
+      "chooseFile": "done",
+      "firstScreenButton": "disabled: 'Ver una prueba gratis'",
+      "slider": "moved"
+    }
+  }
+}
