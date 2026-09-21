@@ -30,7 +30,15 @@ from app.main import make_app  # noqa: E402
 
 DEMO_ORDER = "cs_demo"
 TOKEN_SECRET = os.environ.get("DEMO_TOKEN_SECRET") or secrets.token_hex(16)
-PLACEHOLDERS = ["/next.svg", "/vercel.svg", "/globe.svg", "/window.svg"]
+# Task 09-favicon deleted the five Next.js template SVGs these used to point at.
+# The muestras "despues" (after) crops are already shipped in the export and read
+# as finished headshots, which fits this demo gallery better than a placeholder icon.
+PLACEHOLDERS = [
+    "/muestras/hombre-25-despues.jpg",
+    "/muestras/hombre-30-despues.jpg",
+    "/muestras/mujer-40-despues.jpg",
+    "/muestras/mujer-40-despues-hero.jpg",
+]
 
 
 class DemoModel:

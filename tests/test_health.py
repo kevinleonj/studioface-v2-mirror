@@ -32,7 +32,7 @@ DEPLOY_YML = ROOT / ".github" / "workflows" / "deploy.yml"
 RESERVED_BY_GOOGLE_FRONTEND = {"/healthz"}
 
 
-def build(static_dir=None):
+def build(static_dir=None, stripe_mode="unknown"):
     store = OrderStore()
     pipeline = Pipeline(
         store=store,
@@ -51,6 +51,7 @@ def build(static_dir=None):
         webhook_secret="whsec",
         tasks_token="tt",
         static_dir=static_dir,
+        stripe_mode=stripe_mode,
     )
     return TestClient(app), store
 
@@ -68,13 +69,29 @@ def test_health_responds():
     c, _ = build()
     r = c.get(HEALTH_PATH)
     assert r.status_code == 200
-    assert r.json() == {"ok": True, "killswitch": False}
+    assert r.json() == {"ok": True, "killswitch": False, "stripe_mode": "unknown"}
 
 
 def test_health_reports_the_killswitch():
     c, store = build()
     store.killswitch = True
-    assert c.get(HEALTH_PATH).json() == {"ok": True, "killswitch": True}
+    assert c.get(HEALTH_PATH).json() == {
+        "ok": True,
+        "killswitch": True,
+        "stripe_mode": "unknown",
+    }
+
+
+def test_health_reports_the_stripe_mode():
+    c, _ = build(stripe_mode="test")
+    assert c.get(HEALTH_PATH).json()["stripe_mode"] == "test"
+
+
+def test_health_reports_the_stripe_mode_live():
+    """Twin of the test above: identical wiring, live word, so this field cannot be
+    hard-coded to 'test' and still pass."""
+    c, _ = build(stripe_mode="live")
+    assert c.get(HEALTH_PATH).json()["stripe_mode"] == "live"
 
 
 def test_the_old_reserved_path_is_gone_rather_than_left_as_a_decoy():

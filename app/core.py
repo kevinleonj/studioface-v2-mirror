@@ -26,6 +26,7 @@ from functools import partial
 from typing import Protocol
 
 from app.guards import build_prompt
+from app.logs import id_prefix
 
 logger = logging.getLogger(__name__)
 
@@ -245,7 +246,7 @@ class Pipeline:
             # finished (early return above) or the lease has expired and we take over.
             logger.info(
                 "generation already claimed order_id=%s age=%.0fs",
-                order.id,
+                id_prefix(order.id),
                 self.now() - (order.started_at or 0.0),
             )
             return order
@@ -294,7 +295,7 @@ class Pipeline:
             # Nobody is watching this path: the pipeline refunds by itself.
             logger.error(
                 "refund FAILED order_id=%s refund_id=%s cents=%s status=%s",
-                order.id,
+                id_prefix(order.id),
                 result.id,
                 order.amount_cents,
                 result.status,
@@ -302,7 +303,7 @@ class Pipeline:
         elif result.status != REFUND_CONFIRMED:
             logger.warning(
                 "refund not confirmed order_id=%s refund_id=%s status=%s",
-                order.id,
+                id_prefix(order.id),
                 result.id,
                 result.status,
             )

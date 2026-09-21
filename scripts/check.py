@@ -5,6 +5,8 @@ Usage: python scripts/check.py <name>     Exit 0 = green, 1 = red, 2 = unknown n
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 import sys
 import urllib.error
@@ -21,6 +23,25 @@ def get(path: str) -> tuple[int, str]:
             return response.status, response.read().decode("utf-8", errors="replace")
     except urllib.error.HTTPError as error:
         return error.code, ""
+
+
+NEXT_DEFAULT_FAVICON_MD5 = "c30c7d42707a47a3f4591831641e50dc"
+TEMPLATE_LEFTOVERS = ("/next.svg", "/vercel.svg", "/globe.svg", "/window.svg", "/file.svg")
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+def first_hop(path: str) -> tuple[int, str]:
+    """Status and Location of the first answer, without following it."""
+    opener = urllib.request.build_opener(_NoRedirect)
+    try:
+        with opener.open(BASE + path, timeout=30) as response:
+            return response.status, ""
+    except urllib.error.HTTPError as error:
+        return error.code, error.headers.get("Location", "")
 
 
 def bundle() -> str:
@@ -71,7 +92,83 @@ def gallery_hidden() -> list[str]:
     return ["gallery page lacks noindex"] * ("noindex" not in html)
 
 
+def favicon() -> list[str]:
+    request = urllib.request.Request(BASE + "/favicon.ico")
+    with urllib.request.urlopen(request, timeout=30) as response:
+        digest = hashlib.md5(response.read()).hexdigest()  # noqa: S324 - identity, not security
+    problems = ["favicon is still the Next.js default triangle"] * (
+        digest == NEXT_DEFAULT_FAVICON_MD5
+    )
+    served = [path for path in TEMPLATE_LEFTOVERS if get(path)[0] == 200]
+    return problems + [f"template leftover still served: {path}" for path in served]
+
+
+def redirect() -> list[str]:
+    status, location = first_hop("/legal/privacidad")
+    wanted = BASE + "/legal/privacidad/"
+    problems = [f"no-slash address answers {status}, wanted 301 or 308"] * (
+        status not in (301, 308)
+    )
+    return problems + [f"it forwards to '{location}', wanted '{wanted}'"] * (location != wanted)
+
+
+def human_check_look() -> list[str]:
+    code = bundle()
+    wanted = {
+        "light theme": r'theme:\s*"light"',
+        "Spanish": r'language:\s*"es"',
+        "flexible width": r'size:\s*"flexible"',
+    }
+    return [
+        f"human check lacks {name}"
+        for name, pattern in wanted.items()
+        if not re.search(pattern, code)
+    ]
+
+
+def upload_thumbnails() -> list[str]:
+    return ["upload form shows no thumbnails (marker data-sf-thumbs absent)"] * (
+        "data-sf-thumbs" not in bundle()
+    )
+
+
+def waiting_state() -> list[str]:
+    _, html = get("/")
+    sheets = re.findall(r"/_next/static/[A-Za-z0-9_./~-]+\.css", html)
+    styles = "".join(get(path)[1] for path in sorted(set(sheets)))
+    return ["no designed waiting state (class sf-wait absent from the stylesheet)"] * (
+        ".sf-wait" not in styles
+    )
+
+
+def stripe_mode() -> str:
+    _, body = get("/health")
+    try:
+        return str(json.loads(body).get("stripe_mode", ""))
+    except ValueError:
+        return ""
+
+
+def stripe_mode_reported() -> list[str]:
+    mode = stripe_mode()
+    return [f"/health reports stripe_mode '{mode}', wanted test or live"] * (
+        mode not in ("test", "live")
+    )
+
+
+def stripe_live() -> list[str]:
+    mode = stripe_mode()
+    return [f"/health reports stripe_mode '{mode}', wanted live"] * (mode != "live")
+
+
 CHECKS = {
+    "stripe_mode_reported": stripe_mode_reported,
+    "stripe_live": stripe_live,
+    "favicon": favicon,
+    "redirect": redirect,
+    "human_check_look": human_check_look,
+    "upload_thumbnails": upload_thumbnails,
+    "waiting_state": waiting_state,
     "robots": robots,
     "sitemap": sitemap,
     "head": head,

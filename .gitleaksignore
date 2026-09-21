@@ -17,3 +17,15 @@
 # allowlist nobody can audit, and this file is the one place a real secret could be
 # waved through.
 31c5fc85a06dfcccee8ac3614d7aaf58f8476b92:HANDOFF.md:generic-api-key:838
+
+# c54b2b6 — the current live Stripe webhook ENDPOINT id (starts `we_`, ends
+# `DV4oNARv`; full value in docs/GO-LIVE-KEVIN.md and HANDOFF.md), read from
+# `terraform state show` in the task 17 go-live audit. That is an identifier used to
+# route events, not a signing secret — the signing secret is the `.secret` attribute
+# on that same object, which was never read, printed, or written anywhere in this
+# task. It is high-entropy, which is why the generic-api-key rule fires, same
+# false-positive shape as the DKIM key above. The same class of value (Stripe object
+# ids) is already recorded in the clear in docs/stripe-test-objects.md and
+# docs/GO-LIVE.md. Not spelled out in full here on purpose, so this entry's own text
+# does not reintroduce the same finding on itself.
+c54b2b6dd79f7e4366ebf790c3ba85b6455ecbc5:docs/audit/go-live-dry-run-2026-09-20.txt:generic-api-key:125

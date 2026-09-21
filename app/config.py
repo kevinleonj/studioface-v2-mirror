@@ -89,3 +89,15 @@ class Settings:
 
 def _host(url: str) -> str:
     return url.removeprefix("https://").removeprefix("http://").rstrip("/")
+
+
+def stripe_mode(key: str | None) -> str:
+    """test, live, or unknown — derived only from the key's PREFIX, never the rest of
+    it. docs/verified.md, 2026-09-17 and 2026-09-18: test keys are
+    pk_test_/rk_test_/sk_test_, live are pk_live_/rk_live_/sk_live_."""
+    prefix = key or ""
+    if prefix.startswith("sk_test_") or prefix.startswith("rk_test_"):
+        return "test"
+    if prefix.startswith("sk_live_") or prefix.startswith("rk_live_"):
+        return "live"
+    return "unknown"

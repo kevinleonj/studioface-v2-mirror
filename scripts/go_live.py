@@ -35,9 +35,11 @@ GO_LIVE = ROOT / "docs" / "GO-LIVE.md"
 EXPORT = ROOT / "frontend" / "out"
 PROJECT = "studio-face-fresh-start"
 SITE = "https://studioface.app"
-LIVE_PREFIX = "studioface-live"
-STATE_BUCKET = "studio-face-fresh-start-tfstate"
 TIMEOUT_S = 30
+# The SECOND-generation live objects task 07 created (docs/HANDOFF.md, task 07 entry).
+# Not a secret: a Stripe object id, same class of value docs/stripe-test-objects.md
+# already records in the clear.
+CURRENT_LIVE_PRODUCT = "prod_VISvkPEoVJ3lPM"
 
 OK, NO, UNKNOWN = "ok", "NO", "??"
 
@@ -132,19 +134,30 @@ def check_secrets() -> list[Check]:
     ]
 
 
-def check_live_prefix() -> list[Check]:
-    """Step 6 is "the plan must say 4 to add". It says something else when the live
-    prefix already holds state, and the next step then destroys the test-mode objects.
-    Cheaper to find out here than in a plan nobody read carefully."""
-    code, out = sh(["gcloud", "storage", "ls", f"gs://{STATE_BUCKET}/{LIVE_PREFIX}/"])
-    # An empty prefix is the GOOD case and gcloud reports it as a non-zero exit with
-    # "One or more URLs matched no objects". Reading that as an error blocked the
-    # preflight on exactly the condition it wanted to find.
-    if code != 0 and "matched no objects" in out.lower():
-        return [Check(OK, f"live prefix {LIVE_PREFIX} is empty", "nothing to collide with")]
+def check_stripe_state() -> list[Check]:
+    """The two-prefix plan (a second Terraform state under prefix=studioface-live) was
+    withdrawn before task 07 ran (docs/GO-LIVE.md: "That plan is withdrawn"). There is
+    one state, and the live switch works by `terraform state rm` on the four Stripe
+    addresses in it, then an ordinary apply recreates them live. So the thing worth
+    checking now is not "is a second prefix empty" (it always will be; nothing ever
+    writes there) but "does the one state currently track the CURRENT live objects" —
+    catches the state drifting back to an orphaned generation, read-only, via
+    `terraform state show` (no provider credentials needed; this is a state read, not
+    a provider refresh, so it never touches the live Stripe key)."""
+    code, out = sh(
+        ["terraform", "-chdir=infra", "state", "show", "-no-color", "stripe_product.headshots"]
+    )
     if code != 0:
-        return [Check(UNKNOWN, f"live prefix {LIVE_PREFIX}", out[:70])]
-    return [Check(NO, f"live prefix {LIVE_PREFIX} already holds state", out.splitlines()[0][:70])]
+        return [Check(UNKNOWN, "Stripe product tracked in state", out[:70])]
+    match = next((ln for ln in out.splitlines() if ln.strip().startswith("id ")), "")
+    tracked = match.split("=", 1)[-1].strip().strip('"') if "=" in match else ""
+    return [
+        Check(
+            OK if tracked == CURRENT_LIVE_PRODUCT else NO,
+            "Stripe state tracks the current live product",
+            tracked or "not found",
+        )
+    ]
 
 
 def check_refund_events() -> list[Check]:
@@ -218,7 +231,7 @@ CHECKS = (
     check_export,
     check_ci,
     check_secrets,
-    check_live_prefix,
+    check_stripe_state,
     check_refund_events,
     check_production,
     check_blocking_issues,

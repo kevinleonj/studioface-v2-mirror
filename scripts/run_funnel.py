@@ -3,10 +3,16 @@
     .venv\\Scripts\\python.exe scripts\\run_funnel.py            # build, serve, test
     .venv\\Scripts\\python.exe scripts\\run_funnel.py --serve-only
 
-This is the only place that assembles the environment the walk needs. It reads the test
-credentials from Google Secret Manager (never printing them), writes the Cloudflare dummy
-keys into the environment, builds the static export with the dummy SITE key baked in, and
-serves it through `tests/e2e/funnel_app.build_funnel_app` on loopback.
+This is the only place that assembles the environment the walk needs. It reads the
+Stripe secret key from Google Secret Manager PINNED TO THE TEST VERSION recorded in
+docs/stripe-test-objects.md (never "latest" - that is Kevin's live key since the 20 Sep
+switch, and the guard below would refuse it anyway), reads fal-key at "latest" because
+fal has no live/test split, mints a fresh STRIPE_WEBHOOK_SECRET locally rather than
+reading stripe-webhook-secret from Secret Manager (the walk signs and verifies its own
+webhook, Stripe can never reach 127.0.0.1, so the production signing secret is never
+needed), writes the Cloudflare dummy keys into the environment, builds the static export
+with the dummy SITE key baked in, and serves it through
+`tests/e2e/funnel_app.build_funnel_app` on loopback.
 
 Two refusals, both before anything starts:
   - the Stripe key must begin `sk_test_` or `rk_test_`
@@ -23,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import secrets as secretslib
 import shutil
 import subprocess
 import sys
@@ -35,11 +42,16 @@ HOST, PORT = "127.0.0.1", 8099
 BASE = f"http://{HOST}:{PORT}"
 PROJECT = "studio-face-fresh-start"
 
-# Google Secret Manager name -> environment variable the app reads.
+# docs/stripe-test-objects.md: "Test key version number: 4" - the version immediately
+# before Kevin's live key, which is now newer and would answer "latest".
+STRIPE_TEST_KEY_VERSION = "4"
+
+# Google Secret Manager name -> (environment variable, version). "latest" is safe for
+# fal-key (fal has no live/test split); the Stripe key is pinned, never "latest".
+# stripe-webhook-secret is deliberately absent: see load_environment.
 FROM_SECRET_MANAGER = {
-    "stripe-secret-key": "STRIPE_SECRET_KEY",
-    "stripe-webhook-secret": "STRIPE_WEBHOOK_SECRET",
-    "fal-key": "FAL_KEY",
+    "stripe-secret-key": ("STRIPE_SECRET_KEY", STRIPE_TEST_KEY_VERSION),
+    "fal-key": ("FAL_KEY", "latest"),
 }
 
 # Cloudflare's documented testing keys, which are public constants and not credentials:
@@ -53,7 +65,7 @@ DUMMY_SECRET = "1x" + "0" * 31 + "AA"
 ENV_FILE = ROOT / "frontend" / ".env.production"
 
 
-def read_secret(name: str) -> str:
+def read_secret(name: str, version: str = "latest") -> str:
     gcloud = shutil.which("gcloud") or shutil.which("gcloud.cmd")
     if not gcloud:
         raise SystemExit("gcloud is not on PATH")
@@ -63,7 +75,7 @@ def read_secret(name: str) -> str:
             "secrets",
             "versions",
             "access",
-            "latest",
+            version,
             f"--secret={name}",
             f"--project={PROJECT}",
         ],
@@ -77,18 +89,25 @@ def read_secret(name: str) -> str:
 
 
 def load_environment() -> None:
-    for secret, variable in FROM_SECRET_MANAGER.items():
+    for secret, (variable, version) in FROM_SECRET_MANAGER.items():
         if not os.environ.get(variable):
-            os.environ[variable] = read_secret(secret)
+            os.environ[variable] = read_secret(secret, version)
     key = os.environ["STRIPE_SECRET_KEY"]
     if not key.startswith(("sk_test_", "rk_test_")):
         raise SystemExit("refusing: STRIPE_SECRET_KEY is not a test key")
     if not BASE.startswith(("http://127.0.0.1", "http://localhost")):
         raise SystemExit(f"refusing: {BASE} is not loopback")
+    # Minted per run, never read from Secret Manager: Stripe cannot reach 127.0.0.1, so
+    # the walk signs its own test webhook and verifies it with its own secret. See
+    # tests/e2e/funnel_app.py, where the equivalent Cloud Tasks token is minted the
+    # same way.
+    if not os.environ.get("STRIPE_WEBHOOK_SECRET"):
+        os.environ["STRIPE_WEBHOOK_SECRET"] = secretslib.token_hex(32)
     os.environ["FUNNEL_TURNSTILE_SITEKEY"] = DUMMY_SITE_KEY
     os.environ["FUNNEL_TURNSTILE_SECRET"] = DUMMY_SECRET
     os.environ["FUNNEL_BASE"] = BASE
     print(f"  stripe key   TEST mode ({key[:8]}..., not printed in full)")
+    print("  webhook      signed and verified locally, minted fresh for this run")
     print("  turnstile    dummy keys, always-pass, from Cloudflare's testing page")
 
 

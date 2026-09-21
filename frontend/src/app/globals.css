@@ -147,11 +147,23 @@
 }
 
 /* ---------------------------------------------------------------------------
-   MOTION — five named moments, and nothing else on this site moves.
+   MOTION — five named moments, plus one continuous status indicator (sf-wait,
+   task 12), and nothing else on this site moves.
 
    Rules, from .claude/skills/studioface-ui: no library, opacity and transform only,
    nothing over 400ms, nothing loops, nothing moves on page load. Every moment is
    triggered by something the visitor did.
+
+   sf-wait is the one named exception to "nothing loops" and to the 400ms ceiling,
+   and it is named here rather than snuck in: CLAUDE.md's brief for task 12 says so
+   explicitly — "A slow pulse is allowed; an unbounded spinner is not" — as the
+   honest middle ground between an empty box and the fake `<Progress value={45}>`
+   bars this project has already deleted twice (docs/DESIGN.md, tests/test_the_wait.py).
+   It has no single trigger and runs for as long as generation takes, so it is not
+   one of the five "moments" and is not in DESIGN.md's five-row table — it is
+   documented in its own note there instead. See the rule below for what still holds:
+   opacity only, and the animation lives ONLY inside the no-preference query below, so
+   under `reduce` it does not run at all.
 
    The 400ms ceiling is OUR decision, not a standard. Material Design 2 and 3 are
    JS-rendered and unfetchable; MDN and web.dev give examples but nothing normative.
@@ -164,6 +176,14 @@
    docs/DESIGN.md holds the table: trigger, property, duration, easing, reason.
    tests/test_motion.py enforces every rule above against this file.
    --------------------------------------------------------------------------- */
+
+/* sf-wait's dim-and-blur is a static filter, not motion, so it applies regardless of
+   prefers-reduced-motion — the same way a photo does not get less blurred because
+   somebody asked for less motion. Only the pulse itself (below) is gated. */
+.sf-wait {
+  filter: blur(6px) brightness(0.6);
+}
+
 @media (prefers-reduced-motion: no-preference) {
   /* 1 — sf-frame: the upload target lifts under a pointer. The one control on the page
      that asks for a file has to feel like a thing you can put something into. */
@@ -200,6 +220,15 @@
   details[open] .sf-answer {
     animation: sf-rise 180ms ease-out both;
   }
+
+  /* sf-wait: the visitor's first chosen photo (upload form) or an empty frame (gallery)
+     pulses while generation is under way — see the note above the guard for why this is
+     the one rule here allowed to loop and to run past 400ms. 2.4s a cycle, slow enough to
+     read as "in progress" rather than a spinner; opacity only, so it costs nothing on the
+     compositor. */
+  .sf-wait {
+    animation: sf-wait-pulse 2400ms ease-in-out infinite;
+  }
 }
 
 @keyframes sf-rise {
@@ -212,6 +241,16 @@
 @keyframes sf-fade {
   from {
     opacity: 0;
+  }
+}
+
+@keyframes sf-wait-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.85;
   }
 }
 

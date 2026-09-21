@@ -213,3 +213,19 @@ def test_the_policy_names_no_image_host_the_server_never_serves():
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+def test_the_served_policy_allows_the_upload_thumbnails():
+    """The browser walk caught this after it shipped: four `img-src blob` violations on
+    a page that had just rendered four thumbnails.
+
+    `URL.createObjectURL` makes a `blob:` URL, and the emitted policy named `'self'` and
+    `data:` but not `blob:`, so the visitor picked four photos and saw four empty
+    squares. Asserted against the header a real response carries, not the constant,
+    because the header is the only thing the browser obeys.
+    """
+    sources = served_img_src(build(real_preview()))
+    assert "blob:" in sources, (
+        "the served img-src refuses blob:, so every upload thumbnail is blocked. "
+        f"img-src is: {' '.join(sources)}"
+    )

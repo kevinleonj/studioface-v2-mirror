@@ -109,10 +109,14 @@ const WARDROBES = [
 const PREVIEW_SECONDS = "unos 15 segundos";
 
 const FRAME =
-  "aspect-[4/5] w-full max-w-xs self-center rounded-xl " +
+  "aspect-[4/5] w-full max-w-xs self-center overflow-hidden rounded-xl " +
   "border border-[color:var(--border)] bg-[color:var(--secondary)]";
 
-function Generating() {
+// O13, task 12. The box used to stay empty for the whole wait. sf-wait (globals.css)
+// dims, blurs and slowly pulses the visitor's own first chosen photo instead, so the
+// wait shows their face becoming something rather than a blank rectangle. Decorative:
+// the status paragraph below is what actually announces the wait to a screen reader.
+function Generating({ photoUrl }: { photoUrl: string }) {
   const [elapsed, setElapsed] = useState(0);
   const status = useRef<HTMLParagraphElement>(null);
 
@@ -129,7 +133,16 @@ function Generating() {
     <div className="flex flex-col gap-[var(--s2)]">
       {/* The 4:5 box the photograph will occupy, reserved now, so nothing below it
           moves when the image arrives. */}
-      <div className={FRAME} />
+      <div className={FRAME}>
+        {photoUrl ? (
+          <img
+            src={photoUrl}
+            alt=""
+            aria-hidden="true"
+            className="sf-wait h-full w-full object-cover"
+          />
+        ) : null}
+      </div>
       <p
         ref={status}
         tabIndex={-1}
@@ -150,6 +163,25 @@ function labelFor(key: string): string {
   ).toLowerCase();
 }
 
+type Thumb = { url: string; ext: string };
+
+function extensionOf(name: string): string {
+  const dot = name.lastIndexOf(".");
+  return dot === -1 ? "" : name.slice(dot + 1).toUpperCase();
+}
+
+/**
+ * Safari reports a HEIC/HEIF file with that MIME type; Chromium keeps the type empty
+ * but the extension survives either way, so both are checked. Neither browser decodes
+ * HEIC into an <img>, so those files get a labelled tile instead of a broken-image icon.
+ */
+function isHeic(file: File): boolean {
+  const type = file.type.toLowerCase();
+  if (type === "image/heic" || type === "image/heif") return true;
+  const ext = extensionOf(file.name);
+  return ext === "HEIC" || ext === "HEIF";
+}
+
 export function UploadForm() {
   const [files, setFiles] = useState<File[]>([]);
   const [wardrobe, setWardrobe] = useState("");
@@ -168,6 +200,11 @@ export function UploadForm() {
   // only appears AFTER the preview returns, so a customer who changes it is shown
   // one outfit and sold another unless the page says so.
   const [previewWardrobe, setPreviewWardrobe] = useState("");
+  // O12. One blob URL per kept file, so the visitor sees the photo they are about to
+  // send rather than just its name. The effect below returns ONE cleanup function;
+  // React runs that same function both when `files` changes and when the component
+  // unmounts, so there is a single code path to prove rather than two.
+  const [thumbs, setThumbs] = useState<Thumb[]>([]);
   // F5. Focus lands here once the preview has decoded.
   const buyButton = useRef<HTMLButtonElement>(null);
   // F1. The widget id from render(), and a poll handle so a refresh in flight can be
@@ -180,6 +217,23 @@ export function UploadForm() {
   const [challenge, setChallenge] = useState<
     "waiting" | "ready" | "failed" | "refreshing"
   >("waiting");
+
+  // O12. Every URL this effect creates is revoked by the cleanup it returns - never by
+  // a different function, so "revoked on change" and "revoked on unmount" are the same
+  // assertion. React calls this exact cleanup before the effect re-runs (a new file
+  // list) and one final time when UploadForm unmounts.
+  useEffect(() => {
+    const next: Thumb[] = files.map((file) => ({
+      url: isHeic(file) ? "" : URL.createObjectURL(file),
+      ext: extensionOf(file.name),
+    }));
+    setThumbs(next);
+    return () => {
+      next.forEach((thumb) => {
+        if (thumb.url) URL.revokeObjectURL(thumb.url);
+      });
+    };
+  }, [files]);
 
   /**
    * THE BUG THIS REPLACES, because it cost every sale in production.
@@ -215,6 +269,9 @@ export function UploadForm() {
       // kept it before, which is why there was no reset call anywhere in the bundle.
       widgetId.current = window.turnstile.render(widget.current, {
         sitekey: TURNSTILE_SITEKEY,
+        theme: "light",
+        language: "es",
+        size: "flexible",
         callback: (token: string) => {
           turnstileToken.current = token;
           setChallenge("ready");
@@ -421,6 +478,32 @@ export function UploadForm() {
             ? "JPG, PNG, WEBP o HEIC. Máximo 12 MB cada una."
             : files.map((f) => f.name).join(" · ")}
         </span>
+        {thumbs.length > 0 ? (
+          <div
+            data-sf-thumbs
+            className="mt-[var(--s2)] flex flex-wrap justify-center gap-[var(--s1)]"
+          >
+            {thumbs.map((thumb, i) =>
+              thumb.url ? (
+                <img
+                  key={i}
+                  src={thumb.url}
+                  alt={`Foto elegida ${i + 1}`}
+                  className="size-16 rounded-lg object-cover"
+                />
+              ) : (
+                <div
+                  key={i}
+                  role="img"
+                  aria-label={`Foto elegida ${i + 1}`}
+                  className="flex size-16 items-center justify-center rounded-lg border border-[color:var(--border)] bg-[color:var(--secondary)] text-xs font-medium text-[color:var(--muted-foreground)]"
+                >
+                  {thumb.ext}
+                </div>
+              ),
+            )}
+          </div>
+        ) : null}
         <input
           id="sf-files"
           type="file"
@@ -476,7 +559,7 @@ export function UploadForm() {
           screen where the buyer is deciding whether to hand us four photographs. A
           status line says the true thing — that something is happening — without
           inventing a position on a track. */}
-      {busy ? <Generating /> : null}
+      {busy ? <Generating photoUrl={thumbs[0]?.url ?? ""} /> : null}
 
       {notice ? (
         <p

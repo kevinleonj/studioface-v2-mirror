@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from app.core import Order
+from app.logs import id_prefix
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,9 @@ class Ga4Purchase:
         if order.status != "delivered":
             return  # a refunded order is not revenue
         if not self.measurement_id or not self.api_secret:
-            logger.info("ga4 not configured, purchase not reported order_id=%s", order.id)
+            logger.info(
+                "ga4 not configured, purchase not reported order_id=%s", id_prefix(order.id)
+            )
             return
         value = round(order.amount_cents / 100, 2)
         params = {
@@ -104,11 +107,11 @@ class Ga4Purchase:
                 timeout=TIMEOUT_S,
             )
         except Exception:
-            logger.exception("ga4 purchase failed order_id=%s", order.id)
+            logger.exception("ga4 purchase failed order_id=%s", id_prefix(order.id))
             return
         logger.info(
             "ga4 purchase sent order_id=%s value=%s status=%s",
-            order.id,
+            id_prefix(order.id),
             value,
             getattr(response, "status_code", "?"),
         )

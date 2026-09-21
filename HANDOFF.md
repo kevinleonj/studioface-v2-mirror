@@ -1483,9 +1483,15 @@ path contradiction, and the two things Google still does not document.
   run loses the in-flight task's work; only the `work/done/` moves survive.
 
 **Refreshing the public mirror:** rerun `scripts/make_public_mirror.py` into a NEW empty
-folder, delete `.github/` from it, `git init` and make one commit, then force-push that
-single commit to `kevinleonj/studioface-v2-mirror` only — never to this repository, which
-stays private.
+folder, delete `.github/` from it, `git init`, add the mirror as `origin`, `git fetch
+origin`, `git reset --soft origin/main`, `git add -A`, commit, and push to
+`kevinleonj/studioface-v2-mirror` only — never to this repository, which stays private.
+
+Replacing the mirror with a single commit each time would be tidier, but
+`.claude/hooks/block_irreversible.py` refuses every forced push, so the mirror instead
+carries one sanitised snapshot commit per refresh. Nothing leaks either way: every commit
+on the mirror is output of the redactor, and no commit from this repository is ever
+copied. Do not weaken that hook to make the tidier version work.
 
 ## 2026-09-20 (Claude Code) — task 03: the sale is tied to the visit and the ad click
 
@@ -1739,3 +1745,854 @@ through rather than suppressed by `configure_logging()`. That a *route's own*
 `logger.info` reaches Cloud Run in production (as opposed to uvicorn's access log) was
 not separately re-proven against production in this task; `tests/test_logging.py`
 proves it at the unit level and was already green before this task.
+
+## 2026-09-20 (Claude Code) — the day's close: shipped, mirrored, queue empty
+
+All five remaining queue tasks ran as one subagent each, one branch each, and every one
+moved to `work/done/` only after I ran its own check command myself and saw exit 0. The
+five outside-in production checks are now all green, where four of five were red this
+morning:
+
+    robots          GREEN   (was 404 and three missing lines)
+    sitemap         GREEN   (was 404)
+    head            GREEN   (was no canonical, no og:image, no price data)
+    attribution     GREEN   (was five missing keys and checkout_click still firing)
+    gallery_hidden  GREEN   (was already green)
+
+`scripts/verify_production.py`: all 18 links answered, 1 blocked by the Turnstile
+challenge by design. Final deployed revision `studioface-api-00113-f7k`.
+
+The public mirror is https://github.com/kevinleonj/studioface-v2-mirror — history-free,
+no workflows, secrets and order identifiers redacted. This repository stays private.
+
+Answered read-only from Firestore: order `cs_test_a1eehOBw…` carries
+`wardrobe = 'camisa-azul'`, `style = 'corporativo'`. It is NOT empty, so the outfit
+audit's explanation stands: the preview builds with `wardrobe=None` and asks for a navy
+blazer, the four finals build with the stored value and ask for a light blue shirt.
+
+## 2026-09-20 (Claude Code) — task 06: stripe mode visible
+
+`/health` now names which Stripe mode is live, derived only from the configured key's
+prefix, so the next task (07, the live switch) has a machine-checkable signal instead
+of a guess about which key is loaded.
+
+**What changed.**
+- `app/config.py` (new function `stripe_mode(key)`): pure, no I/O. `sk_test_`/`rk_test_`
+  prefixes answer `"test"`; `sk_live_`/`rk_live_` answer `"live"`; anything else
+  (including empty) answers `"unknown"`. Never inspects anything past the prefix.
+  Vendor fact already in `docs/verified.md` (2026-09-17 and 2026-09-18 entries, from
+  https://docs.stripe.com/keys), so no new researcher pass was needed.
+- `app/main.py`: `Deps` and `make_app` both gained a `stripe_mode: str = "unknown"`
+  field/parameter. `GET /health` now answers
+  `{"ok": ..., "killswitch": ..., "stripe_mode": ...}`.
+- `app/entry.py`: `build()` derives `mode = stripe_mode(s.stripe_secret_key)` right
+  after `Settings.from_env()`, logs it once (`logger.info("stripe_mode=%s", mode)`),
+  and passes `stripe_mode=mode` into `make_app(...)`. Nothing else about the key is
+  ever logged or returned.
+
+**Evidence.**
+- Before: `.venv\Scripts\python.exe -m pytest tests\test_stripe_mode.py` — collection
+  error, `ImportError: cannot import name 'stripe_mode' from 'app.config'`.
+  `tests\test_health.py` (updated to expect the new field) — `7 failed, 3 passed`,
+  `TypeError: make_app() got an unexpected keyword argument 'stripe_mode'`.
+  `tests\test_entry_builds.py`'s two new cases — both failed (no `stripe_mode` on the
+  built `Deps`, no `"stripe_mode="` line from `app.entry`'s own logger).
+- After: `tests\test_stripe_mode.py` — `6 passed` (includes the twin: a live prefix
+  reports `live`, not a hard-coded `test`). `tests\test_health.py` — `10 passed`.
+  `tests\test_entry_builds.py` — `6 passed`, including
+  `test_health_reports_the_stripe_mode_from_the_configured_key` (reads `Deps` off a
+  route closure — calling `GET /health` there would trip the fixture's Firestore
+  double, which deliberately raises on any read) and
+  `test_the_startup_log_states_the_stripe_mode_once` (a handler on `app.entry`'s own
+  logger, unaffected by `configure_logging()` replacing the root logger's handlers).
+- `.venv\Scripts\python.exe scripts\ci.py` — `CI MIRROR GATE: green in 40s`,
+  730 passed, 15 skipped, `DESIGN AUDIT: 0 P0, 0 P1, 0 P2`.
+- Deployed: GitHub Actions run 35536762619, all jobs green (`ci`, `emulator`, `design`,
+  `infra`, `deploy`, including `verify production from outside`). Revision
+  `studioface-api-00117-5jg`.
+- Production: `curl https://studioface.app/health` ->
+  `{"ok":true,"killswitch":false,"stripe_mode":"live"}` — matches this task's own
+  prediction ("expected right after this deploy: live, because the newest secret
+  version is already the live key while the price is still a test price, so checkout
+  is broken until task 07 finishes"). `.venv\Scripts\python.exe scripts\check.py
+  stripe_mode_reported` -> `GREEN`, exit 0. Startup log line confirmed in Cloud Run
+  (`gcloud logging read`, `studioface-api-00117-5jg`): three `stripe_mode=live` lines,
+  one per cold-started instance — "once at startup" holds per instance, as intended.
+
+**Not done, deliberately.** Checkout itself is not fixed here — `stripe_live` (the
+stricter check that wants exactly `live`) is a separate, later gate; today it also
+reports GREEN, but only because the live key is already the newest secret version,
+not because of anything this task changed. That mismatch (live key, test-mode price)
+is task 07's problem, not this one's, and the task brief says "go straight on."
+
+**Follow-ups.**
+- Task 07 (`work/queue/07-live-switch.md`) is next: the price is still a test price
+  under a live key, so checkout is broken in production right now. Nothing in this
+  task masks that; `/health` reporting `live` honestly is what makes it visible.
+
+## 2026-09-20 (Claude Code) — task 07b: the walk works again after the live switch
+
+The live switch (task 07) made `stripe-secret-key`'s newest Secret Manager version the
+live key. `scripts/run_funnel.py` read that secret at `"latest"`, so after the switch it
+handed the walk a live key and its own guard correctly refused to run at all — the walk
+was dead until pointed at the recorded test version.
+
+**What changed (`scripts/run_funnel.py`).**
+- New `STRIPE_TEST_KEY_VERSION = "4"`, the version `docs/stripe-test-objects.md` records
+  as the test key immediately before the live one. `read_secret` now takes a `version`
+  argument; `FROM_SECRET_MANAGER` maps each secret to `(env var, version)`, and only
+  `stripe-secret-key` is pinned — `fal-key` stays at `"latest"` because fal has no
+  live/test split.
+- `stripe-webhook-secret` is no longer read from Secret Manager at all. Stripe can never
+  reach `127.0.0.1`, so the walk has always signed and verified its own webhook; reading
+  the now-rotated production signing secret served no purpose. `STRIPE_WEBHOOK_SECRET`
+  is now minted per run with `secrets.token_hex(32)`, the same pattern
+  `tests/e2e/funnel_app.py` already uses for the local Cloud Tasks token.
+- The guard that refuses a live key (`sk_test_`/`rk_test_` prefix check) is unchanged and
+  still runs after the pinned read, so a wrong or rotated version number is still caught.
+
+**Test first.** `tests/test_walk_uses_test_key.py`, four cases: the pin is recorded in
+the doc (empty), the pinned version is actually requested instead of `"latest"` (one),
+two runs mint two distinct local webhook secrets and neither asks Secret Manager for the
+webhook secret (many), the live-key guard still fires even if the pin were ever wrong
+(failure).
+
+    before: 3 failed, 1 passed (AttributeError: no STRIPE_TEST_KEY_VERSION; and
+            stripe-webhook-secret still requested from Secret Manager)
+    after:  4 passed
+
+**Evidence.**
+- `.venv\Scripts\python.exe scripts\ci.py` — green, 734 passed, 15 skipped,
+  `DESIGN AUDIT: 0 P0, 0 P1, 0 P2`, ruff clean.
+- Free half of the walk, for real: `scripts\run_funnel.py --serve-only` on
+  `127.0.0.1:8099` (test key read at version 4, dummy Turnstile keys, local webhook
+  secret), then `RUN_FUNNEL=1 pytest tests/e2e/test_funnel.py -v -s` (no
+  `RUN_FUNNEL_PAID`) — `6 passed, 2 skipped in 21.90s`, the two skipped being the paid
+  cases. No fal image was spent (the free half never calls fal) and no Stripe charge was
+  made (the two paid cases never ran).
+- Deployed revision unchanged by this task: `studioface-api-00117-5jg` (from task 06);
+  this change touches only the local walk harness, not the deployed app, so no new
+  deploy was expected or watched for this commit beyond the ordinary GitOps push.
+
+**Operational note, repeated from the 20 Sep "paying half" entry above because it bit
+again.** Stopping the server with a forceful process kill (`Stop-Process -Force`) skips
+`run_funnel.py`'s `finally: rebuild_the_real_export()`, leaving `frontend/out` built with
+Cloudflare's dummy site key. Caught this time before the gate ran again; rebuilt by hand
+(`npm run build` in `frontend/`) and confirmed the dummy key string is absent from the
+export before re-running `ci.py` green. `frontend/out` is git-ignored, so nothing was
+ever at risk of being committed, but a stale poisoned export would have made the next
+`ci.py` run's design/turnstile checks lie about what ships.
+
+**Not done, deliberately.** The paid half of the walk was not run tonight — the brief
+said not to, and nothing here changes what task 07's price/webhook migration still owes.
+
+## 2026-09-21 (Claude Code) — task 09: favicon
+
+The site was serving Next.js's default triangle favicon (md5
+`c30c7d42707a47a3f4591831641e50dc`) and its five template SVGs (next.svg, vercel.svg,
+globe.svg, window.svg, file.svg). Replaced with one StudioFace mark: the letter S in
+Newsreader, ink (`#141312`) on paper (`#f2f1ed`), the two tokens `docs/DESIGN.md` already
+names.
+
+**What changed.**
+- `scripts/make_favicon.py` (new, Pillow only — already a dependency, see
+  `pyproject.toml`): draws the mark at 4x supersample then LANCZOS-downscales, so a 16px
+  favicon is antialiased rather than blocky. Writes `frontend/src/app/favicon.ico`
+  (sizes 16/32/48/256, saved RGBA — Turbopack's ICO decoder rejects an RGB PNG frame:
+  "The PNG is not in RGBA format!", found only by actually running `next build`),
+  `frontend/src/app/icon.svg`, and `frontend/src/app/apple-icon.png` (180x180) — the
+  three places Next.js's file-based icon convention looks (`docs/verified.md` N1).
+  Not wired into `scripts/ci.py`, same as `scripts/make_share_image.py`: a manual
+  generation step, re-run only when the mark changes. It downloads the Newsreader
+  variable font from Google's own font source repo on first run (no static instance
+  exists — the live page loads the family through `next/font/google` at build time, not
+  from a committed asset) and caches it under `.fonts-cache/` (gitignored, added to
+  `.gitignore`) so a second run is offline. `docs/verified.md` N2 records the exact
+  upstream file, the OFL 1.1 licence (same family/licence already declared in
+  `docs/DESIGN.md`), and the font's two variation axes.
+- `frontend/public/{next,vercel,globe,window,file}.svg` deleted.
+- `scripts/demo_server.py`: `PLACEHOLDERS` pointed three of its four demo gallery
+  thumbnails at the now-deleted SVGs. Repointed at the `muestras` "despues" (after)
+  crops already shipped in the export — a better fit for "finished headshot" thumbnails
+  than a vendor icon ever was, and no new asset needed.
+- `tests/test_source_scanners.py`: added `test_favicon.py` to the comment-stripping
+  meta-test's exempt set — it reads a generated SVG artefact (no comments to strip) and
+  a plain Python list by membership, not product source prose.
+- `docs/verified.md` N1 (Next.js file-based icon conventions, version-matched to our
+  pinned `next@16.3.5`) and N2 (Newsreader's upstream source and licence) added before
+  writing code, per the researcher-before-code rule.
+
+**Test first.** `tests/test_favicon.py` (new), ten cases: before —
+`ModuleNotFoundError: No module named 'make_favicon'` (collection error, nothing
+existed yet); after — `10 passed`. Covers the committed favicon/icon/apple-icon files
+(existence, path, not-the-default md5, all four ICO sizes present, SVG carries the
+project tokens, PNG is square), the five deleted template files, `demo_server.py` no
+longer pointing at a deleted or missing placeholder, and the pure `mark()` compositing
+function using Pillow's built-in scalable font (`ImageFont.load_default(size=...)`) so
+the unit tests need no network — only the real generation run does.
+
+**Evidence.**
+- Before: `.venv\Scripts\python.exe -m pytest tests\test_favicon.py -v` →
+  `ImportError`/`ModuleNotFoundError: No module named 'make_favicon'`, 1 error, 0 passed.
+- After: `10 passed in 0.60s`.
+- `.venv\Scripts\python.exe scripts\ci.py` → `744 passed, 15 skipped`,
+  `DESIGN AUDIT: 0 P0, 0 P1, 0 P2`, `CI MIRROR GATE: green in 44s`. (One fix needed to
+  get there: `scripts/ci.py`'s frontend build step failed the first time with
+  `Error: Processing image failed / unable to decode image data / The PNG is not in
+  RGBA format!` — Turbopack decoding the 256px ICO frame Pillow had saved as RGB;
+  converting to RGBA before save fixed it, confirmed by re-running the real
+  `next build`, not guessed.)
+- Production, before this task (read-only GET, no cost):
+  `.venv\Scripts\python.exe scripts\check.py favicon` → 6 problems (`favicon is still
+  the Next.js default triangle` plus all five template leftovers still serving 200).
+- Pushed `git push origin main` (pre-push CI mirror gate green, `744 passed, 15
+  skipped`). GitHub Actions run `35542331644`, all jobs green: `ci`, `emulator`,
+  `design`, `infra`, `deploy` (including its `verify production from outside` step).
+  Deployed revision `studioface-api-00123-bbk`, serving 100% of traffic.
+- Production, after deploy: `.venv\Scripts\python.exe scripts\check.py favicon` →
+  `GREEN`, exit 0.
+
+**Not verified, deliberately left for a human to look at.** The mark's visual quality
+(legibility of the S at 16px, whether the border weight reads well in an actual browser
+tab) was checked here by rendering PNG previews and reading them as images, not by a
+human eyeballing a live browser tab or a phone home-screen icon — no design-critic pass
+was run over a single static asset outside a page, and the studioface-ui skill's
+verification protocol is written for pages, not icons. If the mark reads wrong in an
+actual tab, `scripts/make_favicon.py` is a five-minute re-run, not a rebuild.
+
+## 2026-09-21 (Claude Code) — task 11: upload thumbnails
+
+After choosing photos the visitor saw only a file name — no way to confirm it was the
+right selfie without reopening the OS file dialog. `frontend/src/components/upload-form.tsx`
+now shows a 64px square thumbnail per kept file (`object-cover`, `rounded-lg` — `--radius`
+is 10px in `globals.css`, so that token already is the required 10px, no arbitrary value
+needed), in a row (`data-sf-thumbs`) inside the dropzone, each with `alt="Foto elegida N"`.
+
+**What changed.**
+- Two small pure helpers, `extensionOf` and `isHeic`: Safari reports HEIC/HEIF files with
+  that MIME type, Chromium reports the same files with an empty type but keeps the
+  extension, so both are checked. Neither browser decodes HEIC into an `<img>`, so a HEIC
+  file gets a labelled 64px tile (`role="img"`, the same alt text) showing its extension
+  instead of a broken-image icon.
+- One `useEffect` keyed on `files`: creates one `URL.createObjectURL` per non-HEIC file,
+  and returns a single cleanup that revokes every one of them. That cleanup is not
+  duplicated for "on change" versus "on unmount" — React's own contract is that the exact
+  function an effect returns is what runs both when its dependency changes and when the
+  owning component unmounts, so there is one code path to get right, not two.
+
+**Whether every object URL is revoked on both change and unmount, and how it was proved.**
+Proved for real, in a browser, for the "on change" half: `tests/test_upload_thumbnails.py`
+serves a **copy** of the built `frontend/out` (verification protocol #1 — never the
+directory itself), spies on `URL.createObjectURL`/`revokeObjectURL` from the page, uploads
+two real sample photos (`frontend/public/muestras/*-despues.jpg`), confirms two URLs are
+created and nothing is revoked yet, then uploads a different single file and asserts the
+first two URLs are revoked before the wait times out. That is a real measurement, not a
+read of the source.
+"On unmount" was not driven separately with a real unmount, because this landing page never
+conditionally unmounts `UploadForm` in production and forcing one would have meant adding
+test-only harness code to the shipped component. What is proved instead, also for real: there
+is exactly ONE `useEffect` governing the thumbnails and exactly ONE `return () => {...}`
+inside it (`test_the_effect_has_one_cleanup_for_both_paths`), so the function proved to run
+on change is, by construction, the only function React can also run at unmount — not a second,
+untested implementation of the same idea. Browsers also release blob URLs on document unload
+regardless (MDN), which is a second, independent net under the same case.
+
+**Test first.**
+
+    before: 7 failed, 3 passed  (data-sf-thumbs, isHeic, the effect, the cleanup: none exist)
+    after:  10 passed
+
+**Evidence.**
+- `.venv\Scripts\python.exe scripts\ci.py` → `758 passed, 15 skipped`, ruff clean,
+  `DESIGN AUDIT: 0 P0, 0 P1, 0 P2`, `CI MIRROR GATE: green in 61s`.
+- Production before this task (read-only GET, no cost):
+  `.venv\Scripts\python.exe scripts\check.py upload_thumbnails` → `RED   upload form
+  shows no thumbnails (marker data-sf-thumbs absent)`, exit 1 — expected, nothing was
+  deployed yet.
+- No new dependency: `URL.createObjectURL`/`revokeObjectURL` are browser globals.
+  `test_no_new_dependency_was_added` checks `package.json` for an added HEIC-decoding
+  package; none was added.
+- Design tokens: 64px is Tailwind's `size-16` (16 × 4px); 10px radius is `rounded-lg`,
+  which `globals.css`'s `@theme` block points at `var(--radius)` = 10px on this page, not
+  the Tailwind default — verified by reading `frontend/src/app/globals.css`, not assumed.
+
+**Not done, deliberately.** No onError fallback for a non-HEIC file that fails to decode
+for some other reason (a corrupt upload, say) — out of scope for this task, which asked
+only for the HEIC case. `docs/CONVERSION.md` and `docs/DESIGN.md` are unchanged: this is a
+micro-interaction inside an existing step, not a new hypothesis or a new token.
+
+## 2026-09-21 (Claude Code) — task 10: the human check looks like the rest of the page
+
+The Cloudflare Turnstile widget rendered dark, in English, and left-aligned on a light
+Spanish page, because `turnstile.render()` never told it otherwise and fell back to its
+own defaults.
+
+**What changed.** `frontend/src/components/upload-form.tsx`: added `theme: "light"`,
+`language: "es"`, `size: "flexible"` to the existing `turnstile.render()` options object.
+Nothing else in that call changed — same `sitekey`, same `callback`/`error-callback`/
+`expired-callback`, same widgetId ref, same mount effect, same F1 reset/getResponse poll.
+Three keys documented at
+developers.cloudflare.com/turnstile/get-started/client-side-rendering/widget-configurations
+(verified through Context7, 20 Sep 2026).
+
+**Failing test first.** New `tests/test_turnstile_look.py`: asserts the three options are
+in the render() call, asserts the four pre-existing keys in that same call are untouched,
+asserts the mount/reset machinery (`rendered.current`, `widgetId.current`,
+`window.turnstile.reset(`, `getResponse`) was not restructured, and asserts the built
+bundle really ships the three options (skipped if there is no build yet, the same pattern
+`test_turnstile_reset.py` already uses).
+
+    before: 2 failed, 2 passed (the two "did not restructure" guards already held; the
+            three options did not exist yet)
+    after:  4 passed (once frontend/out was rebuilt with the change)
+
+**Evidence.**
+- Production, before this task (read-only GET, no cost):
+  `.venv\Scripts\python.exe scripts\check.py human_check_look` → 3 problems (`human check
+  lacks light theme`, `lacks Spanish`, `lacks flexible width`).
+- Free half of the browser walk, for real: `scripts\run_funnel.py --serve-only` on
+  `127.0.0.1:8099` (test Stripe key, dummy Turnstile keys, local webhook secret), then
+  `RUN_FUNNEL=1 pytest tests/e2e/test_funnel.py -v -s` (no `RUN_FUNNEL_PAID`) — `6 passed,
+  2 skipped in 23.18s`, the two skipped being the paid cases. The walk's own output
+  confirms the F1 reset path this task was told not to touch still works with the three
+  new options in place: `TOKEN AFTER RESET IS DELIVERED BY: the render() callback
+  re-fires`. No fal image was spent (the free half never calls fal) and no Stripe charge
+  was made (the two paid cases never ran). The server was stopped gracefully
+  (`taskkill /PID <pid>`, no `/F`), so `run_funnel.py`'s own `finally:
+  rebuild_the_real_export()` ran and put the real Cloudflare site key back — confirmed by
+  grepping the rebuilt export for the Cloudflare test site keys (none found) and for
+  `flexible` (found, in the same `sitekey:...,theme:"light",language:"es",size:"flexible"`
+  minified snippet that ships).
+- `.venv\Scripts\python.exe scripts\ci.py` — green, `748 passed, 15 skipped`,
+  `DESIGN AUDIT: 0 P0, 0 P1, 0 P2`, ruff clean.
+- Pushed `git push origin main` (pre-push CI mirror gate first refused on a stale-export
+  false alarm — `git checkout`/merge had touched `upload-form.tsx`'s mtime past the
+  already-correct export's — fixed by rebuilding once by hand, then the gate was green and
+  the push went through). GitHub Actions run `35558379294`, job `deploy`, green
+  (`gh run watch 35558379294 --exit-status` confirms). Deployed revision
+  `studioface-api-00124-chr`, serving 100% of traffic. `self-heal` correctly skipped
+  (nothing to heal).
+- Production, after deploy: `.venv\Scripts\python.exe scripts\check.py human_check_look`
+  → `GREEN`, exit 0. Re-ran every other check.py entry immediately after
+  (`stripe_live`, `favicon`, `robots`, `sitemap`, `head`, `attribution`,
+  `gallery_hidden`) — all still `GREEN`; the three that were already red before this task
+  (`redirect`, `upload_thumbnails`, `waiting_state`) are unrelated, unfinished queue items
+  (`work/queue/11-upload-thumbnails.md`, `12-waiting-state.md`, `13-secure-forwarding.md`)
+  and this task did not touch them.
+
+**Not verified.** Whether the widget visually reads as intended in an actual browser
+(colour contrast, RTL-safe centring at `flexible` width on a narrow phone) was checked
+only through the compiled options object and the production bundle grep, not through a
+design-critic screenshot pass — this task's brief was the three named options, not a
+visual review.
+
+## 2026-09-21 (Claude Code) — task 12: the wait shows a face, not an empty box
+
+Both money-in-flight waits — the free preview's frame and the gallery's four frames
+while a paid order generates — used to be an empty box. `sf-wait` (plain CSS in
+`frontend/src/app/globals.css`, never a Tailwind arbitrary value, so
+`scripts/check.py waiting_state` can find it in the stylesheet a GET of the home page
+actually links) dims, blurs and slowly pulses the visitor's own first chosen photo on
+the upload form; the gallery has no photo client-side (that page is opened fresh from a
+link, nothing was ever uploaded in that browser), so the same class pulses the four
+empty frames there instead.
+
+**The one named exception, and only the one.** `sf-wait` loops and runs 2.4s a cycle —
+both against the standing motion budget — because CLAUDE.md's brief for this task says
+so explicitly: "A slow pulse is allowed; an unbounded spinner is not." Both exceptions
+are pinned narrowly in `tests/test_motion.py` (`test_nothing_loops` now fails on any
+`infinite` NOT attached to `sf-wait`; the 400ms ceiling test carries the same one-name
+carve-out) so neither exception can be reused for anything else without the test
+failing. Everything else about the budget is unchanged: opacity only (the static
+`filter: blur() brightness()` sits outside the guard because dimming a photo is not
+motion; only the pulse itself is gated), and the `animation` declaration lives ONLY
+inside `@media (prefers-reduced-motion: no-preference)`, so under `reduce` there is no
+animation on `.sf-wait` at all — proved by regex against the compiled rule
+(`tests/test_waiting_state.py`), not merely read. `docs/DESIGN.md` documents it as a
+sixth rule outside the five-row moment table, since it has no single trigger and is not
+a "moment" — a held-out test (`test_every_moment_is_written_down_with_all_five_columns`)
+still expects exactly five rows, unchanged.
+
+**The timer line and focus behaviour are untouched.** `Generating`'s elapsed-seconds
+counter, its `status.current?.focus()` on mount, and its `role="status"
+aria-live="polite"` paragraph are byte-identical to before this task; only the empty
+`<div className={FRAME} />` gained a conditional `<img>` fed `thumbs[0]?.url` (the same
+blob URL O12 already creates for the upload-target thumbnails — one source of truth,
+not a second decode). A HEIC first file has no decodable blob URL, so the frame falls
+back to the old empty box rather than a broken image.
+
+**Test first.**
+
+    before: 6 failed, 2 passed (sf-wait: no CSS, no upload-form use, no gallery use;
+            the two that already held — timer/focus, and Loading() left alone — passed)
+    after:  8 passed
+
+**Evidence.**
+- `.venv\Scripts\python.exe scripts\ci.py` → `766 passed, 15 skipped`, ruff clean,
+  `DESIGN AUDIT: 0 P0, 0 P1, 0 P2`, `CI MIRROR GATE: green in 47-62s`.
+- Production, before this task (read-only GET, no cost):
+  `.venv\Scripts\python.exe scripts\check.py waiting_state` → `RED   no designed
+  waiting state (class sf-wait absent from the stylesheet)`, exit 1 — expected, nothing
+  deployed yet.
+- Pushed `git push origin main`. First attempt was refused by the pre-push gate on a
+  stale-export false alarm — the same class of bug task 10 hit — `git checkout main` +
+  `git merge --ff-only` touches the mtime of every changed `frontend/src` file past the
+  export already built before the merge; a second `npm run build` after the merge fixed
+  it and the second push went through. GitHub Actions run `35562647275`, all five jobs
+  green (`emulator`, `ci`, `design`, `infra`, `deploy`), confirmed via
+  `gh run view 35562647275 --exit-status` (exit 0). Deployed revision
+  `studioface-api-00126-ctv`, serving 100% of traffic
+  (`gcloud run deploy` log: "has been deployed and is serving 100 percent of traffic").
+- Production, after deploy: `.venv\Scripts\python.exe scripts\check.py waiting_state` →
+  `GREEN`, exit 0. Re-ran every other `check.py` entry immediately after: `stripe_live`,
+  `favicon`, `robots`, `sitemap`, `head`, `attribution`, `gallery_hidden`,
+  `human_check_look`, `upload_thumbnails` all still `GREEN`. `redirect` is still `RED`
+  (307 instead of 301/308, `http://` instead of `https://` in the Location header) —
+  unrelated, already red before this task per the 09-21 human-check-look entry above,
+  and unchanged by anything touched here (`work/queue/13-secure-forwarding.md`).
+- No purchase was made and no paid-walk test was run: `RUN_FUNNEL`/`RUN_FUNNEL_PAID`
+  were never set, and production's `stripe_mode` reads `live` unchanged before and after
+  (`stripe_live` GREEN both times). The `--- PREVIEW REQUEST ---`/`--- DELIVERED PHOTO
+  ---` lines printed mid-`pytest` are `tests/`'s existing fake-fal-client logging (the
+  pipeline unit tests print the request the fake would have received); no network call
+  left this machine and no fal credit was spent by this task.
+
+**Not verified, deliberately.** Whether the pulse and blur read well on an actual phone
+screen (contrast of the "Foto N de 4" label once blurred, whether 2.4s reads as
+"working" rather than sluggish) was checked only through compiled CSS and static
+analysis, not a design-critic screenshot pass or a live browser walk — this task's
+brief was the treatment and the motion-budget exception, not a visual review.
+
+## 2026-09-21 (Claude Code) — task 13: secure forwarding
+
+A bare directory address forwarded to `http://` and then back to `https://`, both
+marked TEMPORARY. Measured on production before any change:
+
+    GET https://studioface.app/legal/privacidad
+    307 -> http://studioface.app/legal/privacidad/
+
+Two independent causes, both root-caused before writing anything.
+
+**Cause 1, the scheme.** Cloud Run terminates TLS itself and proxies the request to
+the container as plain HTTP/1, naming the true scheme in `X-Forwarded-Proto`
+(docs/verified.md 13b, Google's own container-contract and triggering/https-request
+pages). uvicorn's `--proxy-headers` is already the CLI default, but the installed
+source (`.venv/Lib/site-packages/uvicorn/middleware/proxy_headers.py`) only reads that
+header from a connecting address inside `--forwarded-allow-ips`, which itself defaults
+to `127.0.0.1,::1` (uvicorn's own docs/settings.md, docs/verified.md 13a) — never
+Cloud Run's address — so the header was always parsed and then ignored, and
+Starlette's own redirect code built its Location from the literal, plain-http
+connection scheme.
+
+**Cause 2, the status code.** Even with the right scheme, Starlette's `StaticFiles`
+(serving the Next.js export) answers a bare directory path with a 307 by
+construction (`starlette/staticfiles.py`) — TEMPORARY, so no browser or CDN may cache
+it and every visit paid for the redirect again. The address always means the same
+thing, so it needed to be a single 308 (permanent; kept over 301 because RFC 9110
+15.4.9 guarantees the method/body replay unchanged, free here since this route only
+ever serves GET/HEAD).
+
+**What changed.**
+- `Dockerfile` CMD: `--proxy-headers --forwarded-allow-ips='*'` added, single-quoted
+  so `sh -c` never glob-expands the bare `*` against files in `/srv` (verified locally:
+  `touch -- "--forwarded-allow-ips=zzz"` in a test directory, then the quoted form
+  still printed the literal `*`, unquoted did not go untested because it was never
+  shipped unquoted).
+- `app/main.py`: `CachedStatic.get_response` (new) wraps `StaticFiles.get_response` —
+  if the result is a `RedirectResponse` (Starlette's own directory-slash redirect,
+  always 307), it is re-answered as a 308 to the same Location. Nothing else about
+  `CachedStatic.file_response`'s cache-control logic changed.
+
+**Vendor facts, docs/verified.md 13a/13b/13c, researcher agent, 21 Sep 2026.**
+Confirmed: uvicorn's `--forwarded-allow-ips` default and `'*'`'s meaning (13a,
+uvicorn's own docs/settings.md); Cloud Run terminates TLS before the container and
+names `X-Forwarded-Proto` as the header carrying the real scheme (13b, two Cloud Run
+doc pages). **Not confirmed, and recorded as such rather than guessed past:** no
+Cloud Run page (checked container-contract, triggering/https-request,
+securing/security, run/docs/issues) states that Cloud Run sets `X-Forwarded-For`, or
+explicitly endorses trusting every connecting address. Using `'*'` is this session's
+own inference from the ingress path Google does document (GFE -> HTTP proxy -> app
+server, securing/security) — nothing else reaches this container — not a vendor
+claim, and the Dockerfile comment says so rather than attributing it to Google.
+
+**Test first**, `tests/test_secure_forwarding.py` (new, 6 cases).
+
+    before: 4 failed, 2 passed (the two rate-limiter "confirm" cases already held —
+            the leftmost-X-Forwarded-For-entry key was already correct and untouched;
+            the Dockerfile had neither flag, and the redirect was still a 307)
+    after:  6 passed
+
+The two rate-limiter cases are a held-out confirmation, not a fix: they prove that
+trusting the proxy for the *scheme* does not change which address `/api/preview`'s
+ceiling counts against — a visitor forwarded through two different proxy hops is
+still capped once (keyed on the leftmost, visitor, entry), and two different visitors
+sharing one trailing hop are never merged into one counter. `_register_preview`'s
+`x_forwarded_for.split(",")[0].strip()` reads the header itself and never touches
+`request.client`, so this was already correct and is now pinned rather than assumed.
+
+**Evidence.**
+- `.venv\Scripts\python.exe -m pytest tests\test_secure_forwarding.py -v` — 4 failed
+  before code changed, 6 passed after.
+- `.venv\Scripts\python.exe scripts\ci.py` — green, `772 passed, 15 skipped`, ruff
+  clean, `DESIGN AUDIT: 0 P0, 0 P1, 0 P2`, `CI MIRROR GATE: green in 46s`. No frontend
+  files touched, so `npm ci`/frontend build were correctly skipped as unchanged.
+- Production, before this task (read-only GET, no cost):
+  `.venv\Scripts\python.exe scripts\check.py redirect` → 2 problems (`answers 307,
+  wanted 301 or 308`; `forwards to 'http://...', wanted 'https://...'`), exit 1.
+- Pushed `git push origin main`: the local `git commit` result and a concurrent
+  process's push landed on the identical commit `54521e9` before this session's own
+  push ran — the remote rejected it with "cannot lock ref ... is at 54521e9 but
+  expected 7aefa25", which on inspection meant origin/main already equalled local
+  main byte-for-byte (`git fetch` + `git rev-parse` both sides confirmed it), so no
+  further push was made, per the standing instruction to check ancestry rather than
+  force anything. GitHub Actions run `35566663397`, all five jobs green (`ci`,
+  `design`, `emulator`, `infra`, `deploy`; `gh run view --json conclusion` ->
+  `success` for every job). Deployed revision `studioface-api-00128-tdp`, serving
+  100% of traffic.
+- Production, after deploy: `.venv\Scripts\python.exe scripts\check.py redirect` →
+  `GREEN`, exit 0. Raw check: `curl -sD - https://studioface.app/legal/privacidad` ->
+  `HTTP/1.1 308 Permanent Redirect`, `location: https://studioface.app/legal/privacidad/`
+  — one hop, straight to https, permanent. Re-ran every other `check.py` entry
+  immediately after: `stripe_live`, `favicon`, `robots`, `sitemap`, `head`,
+  `attribution`, `gallery_hidden`, `human_check_look`, `upload_thumbnails`,
+  `waiting_state` — all `GREEN`.
+- The rate limiter was not re-tested against production (no way to observe its
+  Firestore-backed key from outside without spending preview/fal budget); confirmed
+  at the unit level instead, in the same commit, against the real ASGI app that
+  Cloud Run runs (`tests/test_secure_forwarding.py`'s two rate-limiter cases, both
+  passing before and after this task's code changes, since `_register_preview`
+  reads the `X-Forwarded-For` header itself and never touches `request.client`,
+  which is the only thing `--forwarded-allow-ips='*'` changes).
+
+## 2026-09-21 (Claude Code) — task 14: visitor address
+
+Both rate-limit call sites keyed on `x_forwarded_for.split(",")[0].strip()` — the
+FIRST entry of `X-Forwarded-For`, which is whatever the connecting client put in its
+own request. A script can set that header itself and prepend a fresh fake address on
+every call, so the per-visitor preview cap (and the `/api/recuperar` cap) could be
+dodged entirely by rotating it.
+
+**Fix.** One new function, `visitor_address(x_forwarded_for, request)` in
+`app/main.py`, used by both call sites. `X-Forwarded-For` grows client-first
+(`visitor, hop1, hop2, ...`); Google Front End (GFE) is the single hop between the
+public internet and this container (docs/verified.md 13c: "GFE -> HTTP proxy -> app
+server", the same ingress fact task 13 already researched — not re-researched here)
+and, per the ordinary X-Forwarded-For convention, appends the address it actually
+observed the connection from. So the LAST entry is the one no visitor can forge — they
+can only pad the header with fake entries in front of it. An absent, empty, or
+malformed header (e.g. a trailing comma leaving the last entry blank) falls back to
+the raw socket peer, same as before this function existed. docs/verified.md 13c is
+explicit that no Cloud Run page states outright that Cloud Run sets `X-Forwarded-For`;
+using the trailing entry is this task's own inference from the documented single-hop
+ingress path, not a vendor claim — no new vendor research was needed or done.
+
+**Where the two call sites actually are.** The task brief's line numbers (301, 386)
+predate tonight's other changes. They are now `_register_preview` (`app/main.py:341`,
+inside the `/api/preview` route) and `_register_recovery` (`app/main.py:426`, inside
+the `/api/recuperar` route) — found by what they do (both build the rate-limit key
+from `x_forwarded_for`), not by line number.
+
+**Task 13's own test pinned the bug.** `tests/test_secure_forwarding.py` had
+`test_preview_rate_limit_keys_on_the_leftmost_forwarded_for_entry` and
+`test_preview_rate_limit_does_not_key_on_the_proxy_hop`, which asserted the FIRST
+entry was correct — the opposite of this task's fix. Both were corrected in place
+(renamed to `..._trailing_forwarded_for_entry` and `..._a_shared_leading_entry`,
+docstrings and IP roles swapped to match GFE's real single-hop ingress) rather than
+left to fail or deleted; nothing else in that file changed.
+
+**Test first**, `tests/test_visitor_address.py` (new, 9 cases: the pure function
+directly — spoofed leading entry, trailing-entry-wins, single-entry, missing header,
+malformed trailing comma, whitespace-only header, no socket peer either — plus two
+through the real `/api/preview` route: a visitor cannot dodge the cap by prepending
+addresses, and two real visitors sharing a spoofed leading entry are not merged).
+
+    before: ImportError collecting the module (`visitor_address` did not exist)
+    after:  9 passed
+
+**Evidence.**
+- `.venv\Scripts\python.exe -m pytest tests\test_visitor_address.py -q` — 9 passed
+  (pasted in the task report).
+- `.venv\Scripts\python.exe -m pytest tests/test_secure_forwarding.py tests/test_visitor_address.py tests/test_recuperar.py tests/test_guards_http.py -q`
+  — 52 passed, confirming the corrected task-13 tests and every other consumer of
+  `x-forwarded-for` (`test_recuperar.py`, `test_guards_http.py`, both single-value
+  headers, unaffected by first-vs-last) still hold.
+- `.venv\Scripts\python.exe scripts\ci.py` — green, `781 passed, 15 skipped`, ruff
+  clean, `DESIGN AUDIT: 0 P0, 0 P1, 0 P2`, `CI MIRROR GATE: green in 47s`. No frontend
+  files touched, so `npm ci`/frontend build were correctly skipped as unchanged. The
+  `--- PREVIEW REQUEST ---`/`--- DELIVERED PHOTO ---` lines mid-pytest are the
+  existing fake-fal-client test logging; no network call left this machine.
+- Pushed `git push origin main`. Pre-push CI mirror gate ran again and was green
+  (`781 passed, 15 skipped`, `CI MIRROR GATE: green in 47s`). GitHub Actions run
+  `35567912904`, all five jobs green (`ci`, `emulator`, `design`, `infra`, `deploy`),
+  confirmed via `gh run watch 35567912904 --exit-status` (exit 0). The deploy job log
+  shows one `##[error]Process completed with exit code 1` annotation from the
+  `lighthouse (alarm not gate)` step — that step runs with `continue-on-error` by
+  design (it is an alarm, not a gate, per this file's own 16-17 Sep entries) and did
+  not fail the job or the run. Deployed revision `studioface-api-00130-v5b`, serving
+  100% of traffic (`gcloud run deploy` log: "has been deployed and is serving 100
+  percent of traffic").
+- Production, after deploy (read-only GETs, no cost, no email):
+  `.venv\Scripts\python.exe scripts\check.py stripe_live` -> `GREEN` (still live,
+  unchanged); `redirect`, `head`, `robots` -> all `GREEN`. No `check.py` entry
+  exercises `/api/preview` or `/api/recuperar` directly, so this task's fix itself
+  is proven by the unit/integration tests above, not by a further production probe;
+  no purchase was made and no preview was posted against production.
+
+**What happens at the edges, stated plainly.** Absent header (no proxy in front, or
+a direct connection reaching the container some other way) or a malformed one (e.g.
+a trailing comma leaving the trailing entry blank) both fall back to the raw socket
+peer, exactly as the two call sites already did before this task for a totally empty
+header — this task only changed which entry of a *present, multi-value* header is
+trusted. A visitor cannot dodge the cap by prepending addresses: everything before
+the last comma is visitor-supplied and now ignored for keying purposes; only the
+entry GFE itself appends moves the counter.
+
+**Not verified.** Whether GFE's real production behaviour actually appends exactly
+one entry (never zero, never more than one) was not observed against a live request
+with a hand-crafted spoofed header — docs/verified.md 13c already records that no
+Cloud Run page confirms Cloud Run sets `X-Forwarded-For` at all, so this remains an
+inference from the documented single-hop ingress path, as task 13 left it, not a
+vendor-confirmed fact newly settled here.
+
+## 2026-09-21 (Claude Code) — task 15: short ids in logs
+
+Task 08's audit found a real production line that prints the full order id — which is
+also the gallery's public id (the `/g/` link Cloud Tasks and the delivery email both
+build with it) — in the clear:
+
+    ga4 purchase sent order_id=cs_test_REDACTED
+    value=19.99 status=204
+
+Anyone who can read that Cloud Run log line can open that customer's gallery.
+`id_prefix` (app/logs.py) already existed for exactly this and just was not used
+everywhere.
+
+**Test first**, `tests/test_log_ids.py` (new, 3 cases): scans every `.py` file under
+`app/`, not only `app/adapters/ga4.py`, so a future `logger.info(..., order.id)`
+cannot slip back in unnoticed. Comments are stripped first (tests/source_scan.py,
+per the rule tests/test_source_scanners.py enforces) and, within each
+`logger.<level>(...)` / `log_call(...)` call span, string literals are stripped too
+(`strip_string_literals`, opt-in per that module's own docstring) — every offending
+line's own format string literally contains the text `order_id=%s`, and without
+stripping it the scanner would fire on its own label rather than the code argument
+after it. The value leaked under three spellings in this codebase, all three
+flagged unless wrapped in `id_prefix(...)`: the `Order.id` attribute, and the bare
+`order_id` / `session_id` parameters that hold that same string in `app/entry.py`
+(`enqueue`, `refund`) — Stripe's checkout session id IS this app's order id, read
+straight from the call sites, not assumed. `order.ga_session_id` (GA4's own visitor
+session id, a different value, never logged) and `SESSION_ID_PREFIX` correctly do
+not match.
+
+    before: 1 failed (10 hits across app/adapters/ga4.py, app/core.py, app/entry.py,
+             app/main.py), 2 passed
+    after:  3 passed
+
+**Every hit found and fixed** (10 call-site arguments across 4 files, each wrapped
+in `id_prefix(...)`; `app/logs.py` and `app/logs.py` import added to
+`app/adapters/ga4.py` and `app/core.py`, already present in `app/entry.py` and
+`app/main.py`):
+- `app/adapters/ga4.py`: `_send`'s two log lines ("ga4 purchase sent", "ga4 purchase
+  failed") and the "ga4 not configured" line — all three logged `order.id` bare.
+- `app/core.py`: `Pipeline.run`'s "generation already claimed" line, and
+  `Pipeline._refund`'s "refund FAILED" and "refund not confirmed" lines — all three
+  logged `order.id` bare.
+- `app/entry.py`: `_enqueue_factory`'s "enqueued" line and `_stripe_refund`'s "refund
+  requested" line logged the bare `order_id` parameter (same full id, different
+  local name); `FirestoreOrderStore.put`'s "order stored" line logged `order.id`
+  bare.
+- `app/main.py`: the Stripe refund webhook's "refund settled" line logged `order.id`
+  bare.
+
+Deliberately unchanged: `ga4.py`'s `_transaction_id` (never logs — derives GA4's
+`transaction_id` from `order.payment_intent` or a `sha256` of `order.id`, exactly as
+before) and `payload["client_id"]`. **The transaction id GA4 actually receives is
+unaffected — only the log line shortens.** Also unchanged: every non-logging use of
+the full `order.id` (Firestore document keys, the `/g/` gallery URL, the delivery
+token, the Cloud Tasks URL, Stripe metadata) — id_prefix is a logging-only rule, and
+truncating any of those would break the product.
+
+**Evidence.**
+- `.venv\Scripts\python.exe -m pytest tests/test_log_ids.py -q` — 3 passed (pasted in
+  the task report).
+- `.venv\Scripts\python.exe -m pytest -q` — 784 passed, 15 skipped (up from 781 passed
+  before this task; +3 for the new test file, nothing else moved).
+- `.venv\Scripts\python.exe scripts\ci.py` — green, ruff clean, `DESIGN AUDIT: 0 P0, 0
+  P1, 0 P2`, `CI MIRROR GATE: green in 48s`. No frontend files touched, so `npm ci` /
+  frontend build were correctly skipped as unchanged.
+- Pushed `git push origin main` (merged fast-forward from `task/15-short-ids-in-logs`,
+  commit `ae75726`). GitHub Actions run `35569719364`, all five jobs green (`ci`,
+  `design`, `emulator`, `infra`, `deploy`; `gh run view --json conclusion` -> `success`).
+  Deployed revision `studioface-api-00132-pb4`, serving 100% of traffic.
+
+**Not verified.** Whether the shortened line actually appears twelve-characters-long
+in a real Cloud Run log entry was not observed against a live purchase — production is
+on live Stripe payments and this task made no purchase, per standing instruction. The
+fix is proved at the unit level (this task's failing-then-passing test, run against the
+exact literal `logger.info` call in `app/adapters/ga4.py`) and by the `id_prefix`
+function itself, which is unchanged and already covered elsewhere in the suite.
+
+## 2026-09-21 (Claude Code) — task 16: secret script on Windows
+
+`scripts/set_secret.py` called `subprocess.run(["gcloud", ...])` directly. On this
+Windows machine `gcloud` is really `gcloud.cmd`, and CreateProcess does not search
+PATHEXT, so that call raised `WinError 2` even with `gcloud` on PATH — the same class
+of bug `scripts/_exec.py` already exists to fix for `bootstrap.py` and others. Kevin
+needs this script working to set the live Stripe secret key.
+
+**The original file's second bug**: `name = sys.argv[1]` and
+`value = getpass.getpass(...)` ran at module import time, not inside a function. That
+made the module impossible to import for testing without also crashing on a missing
+argv or blocking on a hidden prompt — a `main(argv)` function now holds all of it,
+guarded by `if __name__ == "__main__":`.
+
+**The fix**: argv[0] now goes through `_exec.resolve` (the same `shutil.which` fix
+`bootstrap.py`, `scripts/go_live.py` and others already use) before
+`subprocess.run`. `main()` catches the `FileNotFoundError` `resolve()` raises when
+gcloud is missing and prints its message to stderr with exit code 127, instead of
+letting a raw `WinError` traceback reach the terminal.
+
+**Test first**, `tests/test_set_secret.py` (new, loads the module fresh via
+`importlib.util.spec_from_file_location`, the same pattern `tests/test_bootstrap.py`
+uses). Four cases plus cold start, this repo's own rule:
+- cold start: importing the module runs no subprocess and asks for no secret —
+  pins the second bug above so it cannot come back.
+- one: a single secret is resolved and piped on stdin; the resolved executable is
+  exactly what `shutil.which` returned, and the placeholder value never appears in
+  argv or in anything printed to stdout.
+- empty: an empty hidden prompt is still piped to gcloud, not silently dropped.
+- many: three secrets set in sequence never mix up which value went with which name,
+  and no placeholder value ever appears in any call's argv.
+- failure: `shutil.which` returning `None` for `gcloud` must never let
+  `subprocess.run` be reached with a bare `"gcloud"` — `main()` returns a non-zero
+  exit code and prints a message containing "not on PATH", never "WinError".
+
+Every test uses an obvious placeholder string (`PLACEHOLDER_VALUE`,
+`PLACEHOLDER_ONE`/`TWO`/`THREE`), never a real-looking secret, and doubles
+`subprocess.run` and `shutil.which` throughout — no test ever adds a real Secret
+Manager version or shells out to a real `gcloud`.
+
+    before: OSError (module-level getpass.getpass blocked on stdin under pytest's
+             captured input) on all 5 collected tests
+    after:  5 passed
+
+**Evidence.**
+- `.venv\Scripts\python.exe -m pytest tests/test_set_secret.py -q` — 5 passed
+  (pasted in the task report).
+- `.venv\Scripts\python.exe scripts\ci.py` — green, `789 passed, 15 skipped` (up
+  from 784 before this task, +5 for the new test file), ruff clean,
+  `DESIGN AUDIT: 0 P0, 0 P1, 0 P2`, `CI MIRROR GATE: green in 47s`. No frontend
+  files touched, so `npm ci` / frontend build were correctly skipped as unchanged.
+- Deploy: see the line appended immediately below this entry once the push has been
+  watched to green.
+
+**Never verified against a real secret, by design.** This task's own instruction is
+that the value must never appear on a screen, in a log, in shell history, or in an
+argv list — proving that with a real Stripe key would itself be the violation. No
+test shells out to a real `gcloud`, no test adds a real Secret Manager version, and
+the script was not run interactively against production during this task. The fix is
+proved at the unit level, with `subprocess.run` and `shutil.which` always doubled.
+
+## 2026-09-21 (Claude Code) — task 17: go-live rehearsal (audit of task 07)
+
+Task 07 (live-switch) ran overnight. This task is the morning-after audit: run
+`scripts/go_live.py --dry-run`, fix whatever in it still assumed the two-Terraform-
+state-prefix plan docs/GO-LIVE.md explicitly withdrew before task 07 ran, record a
+terraform plan and the fal balance, and write a plain-language purchase-and-refund
+runbook for Kevin — surfacing two things from the live switch he did not yet know
+about.
+
+**go_live.py fix.** `check_live_prefix()` shelled out to `gcloud storage ls
+gs://.../studioface-live/` and always reported "empty" — correctly, because nothing
+ever wrote there; the design that would have used that prefix was withdrawn before
+task 07 ran. Checking it was checking dead ground. Replaced with
+`check_stripe_state()`: reads `terraform -chdir=infra state show
+stripe_product.headshots` (a state READ against the GCS backend, no Stripe/Cloudflare
+provider credentials needed, never touches the live key) and compares the tracked
+product id against `CURRENT_LIVE_PRODUCT = "prod_VISvkPEoVJ3lPM"` — task 07's actual,
+current, second-generation live product. This catches the failure mode that matters
+now (state drifting back to an orphaned generation) instead of one that no longer can
+happen. `tests/test_go_live.py` needed no changes; none of its 6 tests reference the
+removed function or constants by name, and all 6 still pass.
+
+**Terraform plan.** Could not run one from this machine: `infra/providers.tf`
+configures the Stripe and Cloudflare providers from `STRIPE_API_KEY` /
+`CLOUDFLARE_API_TOKEN` in the environment, and getting either onto this machine here
+means reading a live secret's value, which both this task's rule and CLAUDE.md's
+GitOps rule ("terraform apply is CI's alone... never touch secrets") forbid outside
+CI. `terraform init` and `terraform state show <address>` do not need those
+credentials (GCS-backend reads only) and both ran clean with none. Substituted the
+real plan+apply CI already ran on the current HEAD (run `35570828196`, this morning):
+`Plan: 0 to add, 1 to change, 0 to destroy` — the one change is
+`google_cloud_run_v2_service.api`'s `client = "gcloud" -> null`, a known harmless
+oscillation (the deploy job's own `gcloud run deploy` step stamps that annotation
+after Terraform runs, so the next apply always reverts it) unrelated to Stripe and
+recurring on every ordinary deploy. Zero Stripe resources changed. Full detail and
+the state-show confirmation of which Stripe objects are tracked now:
+`docs/audit/go-live-dry-run-2026-09-20.txt`.
+
+**fal balance**, read-only GET to `https://rest.alpha.fal.ai/billing/user_balance`
+(docs/verified.md, 2026-09-17), fal key held in memory only long enough to build the
+Authorization header, never printed: **$5.8856 USD**. No generation ran in this task.
+
+**Two findings written up for Kevin** in the new `docs/GO-LIVE-KEVIN.md`, not
+previously documented anywhere he'd see them:
+1. Task 07's very first deploy (task 05's push, ~20:24 UTC 20 Sep) hit the live API
+   before task 07's state-rm ran, read "not found" as drift, and created a full
+   orphaned FIRST generation of live Stripe objects (`prod_VISFzDNBbZzaQo`, prices
+   ending `L23`/`DJYT`, webhook `we_..L33..`) minutes before task 07's real second
+   generation (`prod_VISvkPEoVJ3lPM`, prices `...VfWNga0R`/`...xKS00M8J`, webhook
+   `we_1UHrzY3SzksBW0B3DV4oNARv`) — confirmed as the one currently tracked, via
+   `terraform state show`. The orphaned webhook is very likely still enabled in live
+   Stripe, signed with a now-destroyed secret, so real payments will make it fail
+   delivery, retry, and email Kevin a "webhook failing" notice. Checking whether it is
+   actually still enabled needs the live Stripe API (`GET /v1/webhook_endpoints`),
+   which needs the live secret key — not done here, per this task's rule never to read
+   a secret value. `docs/GO-LIVE-KEVIN.md` gives Kevin the exact dashboard path
+   (Developers -> Webhooks, the endpoint NOT ending `DV4oNARv`) to disable or delete it
+   by hand, and states plainly that fulfilment is not at risk either way: the app
+   answers unsigned/mis-signed webhook deliveries with 400 and also fulfils from the
+   success redirect (`app/main.py`'s `_fulfil_session`, unit C2).
+2. The pre-switch TEST-mode objects in `docs/stripe-test-objects.md` are orphaned on
+   purpose (they let `docs/TEST-PURCHASE.md` be re-run later without touching real
+   money) and must not be deleted — stated in `docs/GO-LIVE-KEVIN.md` so a future
+   cleanup pass does not remove them.
+
+**docs/GO-LIVE-KEVIN.md** also walks the one real purchase-and-refund rehearsal: what
+the Stripe checkout address must start with (`https://checkout.stripe.com/c/pay/
+cs_live_`, and what it means if it ever says `cs_test_` instead), the redirect and
+delivery-email shape, the dashboard click-path to refund, which email confirms the
+refund (Stripe's own, separate from the app's Resend delivery email), and the five
+exact `logger.info` lines — read from `app/entry.py`, `app/core.py`,
+`app/adapters/ga4.py` at the actual call sites, not from memory — that confirm the
+payment notice arrived once and generation ran to `delivered` once: `order stored
+...status=paid`, `enqueued...`, `order stored...status=generating`, `order
+stored...status=delivered outputs=4`, `ga4 purchase sent...`.
+
+**Evidence.**
+- `.venv\Scripts\python.exe -m pytest tests/test_go_live.py -q` — 6 passed (unchanged
+  by the fix; asserted before and after editing `check_stripe_state()` in).
+- `.venv\Scripts\python.exe scripts\ci.py` — green, `789 passed, 15 skipped`, ruff
+  clean, `DESIGN AUDIT: 0 P0, 0 P1, 0 P2`, `CI MIRROR GATE: green in 49s`.
+- `.venv\Scripts\python.exe -c "import sys,pathlib; sys.exit(0 if 'READY:' in
+  pathlib.Path('docs/audit/go-live-dry-run-2026-09-20.txt').read_text(encoding='utf-8')
+  else 1)"` — exit 0.
+- Pushed `git push origin main` (merged fast-forward from `task/17-go-live-rehearsal`).
+  The pre-push CI mirror gate ran again and was green (`789 passed, 15 skipped`,
+  `CI MIRROR GATE: green in 47s`). The first push attempt was blocked locally by the
+  gitleaks pre-push hook, which correctly flagged the live webhook endpoint id quoted
+  in `docs/audit/go-live-dry-run-2026-09-20.txt` as high-entropy (`generic-api-key`
+  rule) — it is an object id, not the endpoint's signing secret, which this task never
+  read or printed; allowlisted in `.gitleaksignore` with the id itself not spelled out
+  in the comment, so the entry does not trip the same rule on itself. GitHub Actions
+  run `35573392509`, all five jobs green (`ci`, `design`, `emulator`, `infra`,
+  `deploy`; `gh run watch 35573392509 --exit-status` exit 0). Deployed revision
+  `studioface-api-00135-tj8`, serving 100% of traffic. Production after deploy:
+  `curl -s https://studioface.app/health` -> `{"ok":true,"killswitch":false,
+  "stripe_mode":"live"}`.
+
+**Not verified.** Whether the orphaned first-generation webhook endpoint is actually
+still enabled in the live Stripe account — reading that needs the live secret key,
+which this task's absolute rule forbids reading even to check a boolean. Left as an
+explicit action item for Kevin in `docs/GO-LIVE-KEVIN.md`, with the exact dashboard
+path. No purchase was made and nothing was refunded in this task; that is Kevin's
+step, walked in the new document, not run here.

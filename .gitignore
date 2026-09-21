@@ -38,3 +38,7 @@ docs/ui/**/_faildemo/
 
 # The task loop's own log (scripts/queue_runner.py).
 work/run.log
+
+# Newsreader font cached by scripts/make_favicon.py on first run (docs/verified.md N2);
+# fetched from Google's font repo, not a repo asset.
+.fonts-cache/

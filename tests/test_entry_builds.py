@@ -19,6 +19,7 @@ Everything faked here is a thing that opens a socket, and nothing else: Firestor
 Storage, Cloud Tasks, Stripe, Resend. The wiring between them is real.
 """
 
+import logging
 import sys
 import types
 from pathlib import Path
@@ -176,6 +177,53 @@ def test_every_route_the_funnel_needs_is_registered(built):
         "/internal/generate/{order_id}",
     ):
         assert path in paths, f"{path} is not registered; have {sorted(paths)[:12]}"
+
+
+def test_health_reports_the_stripe_mode_from_the_configured_key(built):
+    """Task 06, at the composition root: ENV's STRIPE_SECRET_KEY is sk_test_x, so
+    build() must derive and wire 'test' into the real Deps, not just the unit.
+
+    Reads Deps off a route closure rather than calling GET /health: that route also
+    reads the (faked) killswitch from Firestore, and this fixture's Firestore double
+    deliberately raises on any read (see _Collection.get above) to prove build() does
+    not query Firestore at startup - a real GET here would trip that guard for a
+    reason this test has nothing to do with."""
+    deps = None
+    for route in built.routes:
+        closure = getattr(getattr(route, "endpoint", None), "__closure__", None) or ()
+        for cell in closure:
+            candidate = getattr(cell, "cell_contents", None)
+            if hasattr(candidate, "stripe_mode"):
+                deps = candidate
+                break
+        if deps is not None:
+            break
+    assert deps is not None, "no route closure carries Deps"
+    assert deps.stripe_mode == "test"
+
+
+def test_the_startup_log_states_the_stripe_mode_once(monkeypatch, built):
+    """Task 06: 'log the same word once at startup.' Checked at the composition root
+    (CLAUDE.md lesson 8) by re-running build() with a collector on app.entry's own
+    logger, which configure_logging()'s root-handler replacement does not touch."""
+    from app import entry
+
+    records: list[str] = []
+
+    class _Collect(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            records.append(record.getMessage())
+
+    handler = _Collect()
+    entry_logger = logging.getLogger("app.entry")
+    entry_logger.addHandler(handler)
+    try:
+        entry.build()
+    finally:
+        entry_logger.removeHandler(handler)
+
+    lines = [m for m in records if "stripe_mode" in m]
+    assert lines == ["stripe_mode=test"], f"expected exactly one line, got {records}"
 
 
 def test_the_preview_is_wired_to_store_and_sign_its_result(built):

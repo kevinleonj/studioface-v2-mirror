@@ -75,7 +75,11 @@ def durations_ms() -> list[tuple[str, float]]:
 
 
 def test_no_animation_or_transition_is_longer_than_the_ceiling():
-    over = [(line, ms) for line, ms in durations_ms() if ms > MAX_MS]
+    """sf-wait is the one named exception: CLAUDE.md's brief for task 12 explicitly
+    allows "a slow pulse" as the honest replacement for the fake progress bars this
+    project has already deleted twice, and a pulse read as "in progress" needs longer
+    than 400ms a cycle. Everything else still obeys the ceiling."""
+    over = [(line, ms) for line, ms in durations_ms() if ms > MAX_MS and "sf-wait" not in line]
     assert not over, f"over the {MAX_MS}ms ceiling: {over}"
 
 
@@ -95,7 +99,13 @@ def test_nothing_animated_is_outside_opacity_and_transform():
 
 
 def test_nothing_loops():
-    assert "infinite" not in css()
+    """sf-wait is the one exception, named in the assertion itself so the exception
+    stays narrow: any other line using "infinite" fails this test. "alternate" stays
+    banned outright — sf-wait's own keyframes go up and back down inside one cycle, so
+    even the one exception does not need it."""
+    lines = css().splitlines()
+    offenders = [line for line in lines if "infinite" in line and "sf-wait" not in line]
+    assert not offenders, offenders
     assert "alternate" not in css()
 
 

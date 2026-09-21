@@ -187,6 +187,10 @@ def test_tests_that_scan_product_source_strip_comments_first():
         "test_seo.py",
         "test_legal_identity.py",
         "test_contrast.py",
+        # Reads a generated SVG artefact (scripts/make_favicon.py output, no comments to
+        # strip) and demo_server.PLACEHOLDERS, a plain list checked by membership, not by
+        # a pattern that could also match a comment.
+        "test_favicon.py",
     }
     sources = re.compile(r'"(?:app|scripts|frontend)"|/\s*"src"|"(?:tsx|py)"')
     offenders = []

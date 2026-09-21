@@ -244,6 +244,39 @@ still `none`. Somebody who has asked for less motion gets **none** of the five m
 not a fast version of them, because each one lives inside the no-preference query rather
 than relying on the global guard to shorten it.
 
+### A sixth rule that is not one of the five (21 Sep 2026, task 12)
+
+`sf-wait` replaces the empty box the visitor stared at while the free preview
+generated, and the four empty frames the gallery showed while a paid order was
+generating. It is not in the table above because it is not a "moment" — it has no
+single trigger and it keeps running for as long as generation takes — so it gets its
+own note instead of a sixth row.
+
+It shows the visitor's own first chosen photo, dimmed and blurred, pulsing slowly in
+the frame on the upload form; the gallery has no photo to show while an order is
+generating (that page is opened fresh from a link — nothing was ever uploaded in that
+browser), so the same class dims and pulses the four empty frames there instead. It
+replaces the fake `<Progress value={45}>` and `<Progress value={60}>` bars this
+project has already deleted twice (docs above, tests/test_the_wait.py) with the
+honest thing CLAUDE.md's brief for this task names directly: "A slow pulse is
+allowed; an unbounded spinner is not."
+
+It is the one named exception to two of the rules above, and only those two:
+
+- **It loops.** A continuous status indicator has to, for as long as the status is
+  true. `tests/test_motion.py::test_nothing_loops` names the exception in the
+  assertion itself, so it stays narrow — any other line using `infinite` still fails.
+- **It runs longer than 400ms a cycle** (2.4s), because a pulse fast enough to fit
+  the ceiling reads as a flicker, not "in progress".
+
+Everything else holds exactly as it does for the five moments: opacity only (a
+static `filter: blur() brightness()` sits outside the guard, because dimming a photo
+is not motion and does not stop because someone asked for less of it — only the pulse
+itself does), and the `animation` declaration lives ONLY inside
+`@media (prefers-reduced-motion: no-preference)`, so under `reduce` there is no
+animation property on `.sf-wait` at all — not a fast version of the pulse, an absent
+one, same as the five moments above.
+
 ### The ceiling is ours, not a standard
 
 400 ms is a project decision. Material Design 2 and 3 are JS-rendered and could not be

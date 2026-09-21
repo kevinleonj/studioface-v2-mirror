@@ -136,7 +136,18 @@ CSP = {
     # Fonts are self-hosted: next/font/google inlines them at build time, so there is no
     # fonts.gstatic.com to allow. Measured, not assumed.
     "font-src": ["'self'"],
-    "img-src": ["'self'", "data:", TURNSTILE, SIGNED_IMAGES, *GA_COLLECT, *GOOGLE_PIXELS],
+    # `blob:` is the upload thumbnails: URL.createObjectURL gives the visitor a picture
+    # of each file they chose, and without this the browser refuses all four. Images
+    # only - blob: in script-src would let the page run code it assembled itself.
+    "img-src": [
+        "'self'",
+        "data:",
+        "blob:",
+        TURNSTILE,
+        SIGNED_IMAGES,
+        *GA_COLLECT,
+        *GOOGLE_PIXELS,
+    ],
     "connect-src": [
         "'self'",
         TURNSTILE,
@@ -179,6 +190,19 @@ DAY_CACHED_PREFIXES = ("/muestras/", "/share.jpg")
 
 class CachedStatic(StaticFiles):
     """StaticFiles that states its caching intent instead of leaving it to heuristics."""
+
+    async def get_response(self, path, scope):  # type: ignore[override]
+        response = await super().get_response(path, scope)
+        if isinstance(response, RedirectResponse):
+            # Starlette's own directory-to-trailing-slash redirect (starlette/
+            # staticfiles.py) is a 307, TEMPORARY, by construction: no browser or CDN
+            # may cache it, so every visit to a bare directory path such as
+            # /legal/privacidad paid for it again. The address always means the same
+            # thing, so this is a single 308 PERMANENT redirect. 308 over 301: RFC
+            # 9110 15.4.9 guarantees the method and body replay unchanged, which 301
+            # does not - free here since this route only ever serves GET/HEAD.
+            return RedirectResponse(response.headers["location"], status_code=308)
+        return response
 
     def file_response(self, *args, **kwargs):  # type: ignore[override]
         response = super().file_response(*args, **kwargs)
@@ -223,6 +247,9 @@ class Deps:
     # paid walk redirected a browser off loopback to the production gallery holding an
     # order that existed only locally (tests/test_after_payment.py).
     gallery_base: str = GALLERY_BASE
+    # "test", "live" or "unknown" — app.config.stripe_mode(key), derived from the
+    # configured Stripe key's PREFIX only. Never the key itself.
+    stripe_mode: str = "unknown"
 
 
 def make_app(
@@ -243,6 +270,7 @@ def make_app(
     # schema. scripts/demo_server.py asks for it explicitly, and app/entry.py passes
     # Settings.enable_docs, which is False unless ENABLE_DOCS is set.
     docs: bool = False,
+    stripe_mode: str = "unknown",
 ) -> FastAPI:
     d = Deps(
         pipeline,
@@ -257,6 +285,7 @@ def make_app(
         sign_url,
         create_checkout,
         gallery_base,
+        stripe_mode,
     )
     # F8/O9. /docs, /redoc and /openapi.json publish every route, parameter and
     # response shape of the money path - including /internal/generate/{order_id} and
@@ -293,12 +322,34 @@ def make_app(
     return app
 
 
+def visitor_address(x_forwarded_for: str, request: Request) -> str:
+    """The address to key a per-visitor limit on.
+
+    X-Forwarded-For grows client-first: "visitor, hop1, hop2, ...". The FIRST entry
+    is whatever the connecting client put in its own request - any script can set
+    that header freely - so keying on it let a visitor prepend a fresh fake address
+    on every call and dodge the cap entirely. Google Front End (GFE) is the single
+    hop between the public internet and this container (docs/verified.md 13c: "GFE
+    -> HTTP proxy -> app server") and, per the ordinary X-Forwarded-For convention,
+    appends the address it actually observed the connection from - so the LAST
+    entry is the one no visitor can forge, only pad in front of. (docs/verified.md
+    13c is explicit that no Cloud Run page states outright that Cloud Run sets this
+    header; using the trailing entry is this task's own inference from the
+    documented single-hop ingress path, not a vendor claim.)
+
+    An absent, empty, or malformed (e.g. trailing-comma) header falls back to the
+    raw socket peer, same as before this function existed.
+    """
+    last = x_forwarded_for.split(",")[-1].strip()
+    return last or _client_ip(request)
+
+
 def _register_preview(app: FastAPI, d: Deps) -> None:
     @app.post("/api/preview")
     async def preview(request: Request, x_forwarded_for: str = Header(default="")):
         if d.pipeline.store.killswitch:
             raise HTTPException(503, "paused")
-        ip = x_forwarded_for.split(",")[0].strip() or _client_ip(request)
+        ip = visitor_address(x_forwarded_for, request)
         form = await request.form()
         if not d.verify_turnstile(str(form.get("turnstile_token", "")), ip):
             raise HTTPException(403, "turnstile")
@@ -383,7 +434,7 @@ def _register_recovery(app: FastAPI, d: Deps) -> None:
         email = str(body.get("email", "")).strip().lower()
         if "@" not in email or "." not in email.split("@")[-1]:
             raise HTTPException(422, "bad_email")
-        ip = x_forwarded_for.split(",")[0].strip() or _client_ip(request)
+        ip = visitor_address(x_forwarded_for, request)
         if not d.limiter.check_named("rec", ip, RECOVER_PER_HOUR, RECOVER_WINDOW_S):
             raise HTTPException(429, "recover_cap")
         for order in d.pipeline.store.find_by_email(email):
@@ -487,7 +538,11 @@ def _download_url(d: Deps, uri: str, n: int) -> str:
 def _register_public(app: FastAPI, d: Deps) -> None:
     @app.get(HEALTH_PATH)
     def health():
-        return {"ok": True, "killswitch": d.pipeline.store.killswitch}
+        return {
+            "ok": True,
+            "killswitch": d.pipeline.store.killswitch,
+            "stripe_mode": d.stripe_mode,
+        }
 
     @app.post("/api/stripe/webhook")
     async def webhook(request: Request, stripe_signature: str = Header(default="")):
@@ -670,7 +725,7 @@ def _handle_refund(d: Deps, event: dict) -> dict:
     d.pipeline.store.put(order)
     logger.info(
         "refund settled order_id=%s refund_id=%s status=%s order_status=%s",
-        order.id,
+        id_prefix(order.id),
         refund.get("id"),
         order.refund_status,
         order.status,

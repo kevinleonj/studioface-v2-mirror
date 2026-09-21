@@ -1,0 +1,168 @@
+Go-live rehearsal audit — task 17, run 2026-09-21 (file named for the 2026-09-20 switch it audits)
+====================================================================================================
+
+This is a read-only audit of task 07 (live-switch, ran 20 Sep 2026 ~20:24 UTC), run the
+morning after. Nothing below applies infrastructure, deploys, sets a secret, or spends
+money beyond one read-only fal balance check and one read-only GET against production.
+
+1. scripts/go_live.py --dry-run
+--------------------------------
+Change made to the script before this run: removed check_live_prefix() and the
+LIVE_PREFIX / STATE_BUCKET constants. Those checked whether a SECOND Terraform state
+prefix ("studioface-live") was empty — that was the two-state design docs/GO-LIVE.md
+explicitly withdrew before task 07 ran ("That plan is withdrawn... one state, made to
+forget four things"). The real design uses ONE state and `terraform state rm` on four
+addresses, then an ordinary apply recreates them live in the same state. Checking the
+old prefix was checking a place nothing will ever write to again — dead code testing a
+plan that was never run.
+
+Replaced with check_stripe_state(): reads `terraform -chdir=infra state show
+stripe_product.headshots` (a state READ, needs no Stripe/Cloudflare provider
+credentials, never touches the live key) and compares the tracked product id against
+the CURRENT live product task 07 actually created. This catches the one failure mode
+that matters now: the state drifting back to an orphaned generation, not an imaginary
+second prefix.
+
+Output of `.venv\Scripts\python.exe scripts\go_live.py --dry-run`, captured on branch
+task/17-go-live-rehearsal before this task's own commit landed on main (see the two
+notes below the output):
+
+    GO-LIVE PREFLIGHT — reads everything, changes nothing
+
+      NO on main: task/17-go-live-rehearsal
+      NO working tree clean: ['M scripts/go_live.py']
+      ok frontend built: frontend/out/index.html present
+      ok trader identity on the landing page: LSSI-CE Art. 10
+      ok CI green: success
+      ok CI ran on HEAD: 1b06e378
+      ok secret stripe-secret-key exists: name only, never the value
+      ok secret stripe-webhook-secret exists: name only, never the value
+      ok Stripe state tracks the current live product: prod_VISvkPEoVJ3lPM
+      ok refund events declared in infra/stripe.tf: both present
+      ok production healthy: {"ok": true, "killswitch": false, "stripe_mode": "live"}
+      ok kill switch off: killswitch=False
+      NO no open needs-Kevin issues: #11, #9, #7, #6, #4
+
+    THE PROCEDURE (docs/GO-LIVE.md). Every step is yours to run.
+
+      0. Activate the Stripe account for live payments; close issue #3 (legal, incl. the NIF); run docs/TEST-PURCHASE.md green
+      0b. Bizum capability: business tax ID (NIF Z3714124-C) or DNI/NIE, plus `business_type`
+      1. Live key into Secret Manager
+      2. Live key as the CI secret
+      3. Forget the four tracked Stripe resources in the one state
+      4. Read the `state rm` output
+      5. Push the commit that documents the switch
+      6. Read the triggered deploy's `infra` job apply log
+      7. Verify `/health` and the mode check
+      8. Verify the webhook address still refuses
+      9. Verify a made-up session still 404s
+      11. Bizum on
+      11b. Before 11: `refund.updated` / `refund.failed` declared and handled
+      12. One real purchase at the live price, then refund it
+
+    GO-LIVE PREFLIGHT: BLOCKED by 3 check(s)
+      - on main: task/17-go-live-rehearsal
+      - working tree clean: ['M scripts/go_live.py']
+      - no open needs-Kevin issues: #11, #9, #7, #6, #4
+
+Notes on the 3 "NO" lines above (none of them are about Stripe or money):
+  - "on main" / "working tree clean": both are this task's OWN in-progress branch and
+    diff, captured mid-audit on purpose rather than staged to look clean. Both clear
+    the moment this task's commit merges to main, which it does by the end of this
+    task.
+  - "no open needs-Kevin issues": #11 (CI token workflow permission), #9 (Docker
+    Desktop not installed locally), #7 (Resend region), #6 (3 before/after photo pairs
+    for the landing page), #4 (an old "run the 4242 test purchase" issue, now stale —
+    production is live, so a 4242 card will be declined; it should say "run ONE real
+    purchase and refund it", which is what this task's own GO-LIVE-KEVIN.md sets up).
+    None of these five touch the payment path, the webhook, or money. Issue #8
+    ("needs Kevin: go live") is deliberately excluded by go_live.py's own filter — it
+    is the umbrella tracking issue for this whole effort and is expected to stay open.
+
+2. Terraform plan
+------------------
+A `terraform plan` run from THIS machine cannot reach a verdict: `infra/providers.tf`
+configures the Stripe and Cloudflare providers from `STRIPE_API_KEY` /
+`CLOUDFLARE_API_TOKEN` in the environment, and getting either of those onto this
+machine means reading a live secret's value — which this task's rule forbids and which
+CLAUDE.md's GitOps rule reserves for CI alone ("terraform apply is CI's alone... You
+never touch secrets, never run terraform apply"). `terraform -chdir=infra init` and
+`terraform state show <address>` do NOT need those credentials (they read the GCS
+state file, not the live APIs), and both ran clean above with no credentials at all.
+A plan/apply that talks to the actual Stripe and Cloudflare APIs only ever runs inside
+deploy.yml, with GitHub's own masked secrets.
+
+So the closest honest substitute is the real plan+apply CI already ran, on the current
+main HEAD (1b06e37, this morning, run 35570828196 — `gh run view 35570828196 --log`):
+
+    Terraform will perform the following actions:
+
+      # google_cloud_run_v2_service.api will be updated in-place
+      ~ resource "google_cloud_run_v2_service" "api" {
+          - client = "gcloud" -> null
+          ...
+        }
+
+    Plan: 0 to add, 1 to change, 0 to destroy.
+    Apply complete! Resources: 0 added, 1 changed, 0 destroyed.
+
+This is NOT drift in the Stripe objects — 0 to add, 0 to destroy, and no stripe_*
+resource is touched. The one change is a known, harmless oscillation: the `gcloud run
+deploy` step later in the SAME job stamps a `client=gcloud` annotation onto the
+revision it deploys; Terraform's own config never sets that field, so the very next
+apply always finds it set and reverts it to null. This has nothing to do with the live
+switch and does not need Kevin's attention; it recurs on every ordinary deploy,
+including the one this task's own push triggers (see HANDOFF.md for that run's log
+once watched). No Stripe resource plan showed any change in this or the prior five
+deploys since task 07 (05 through 16 all deployed green with no infra/*.tf edits in
+that span — `git log --oneline -- infra/` shows the last actual infra/*.tf change
+predates the live switch).
+
+Read-only confirmation of exactly which Stripe objects the one Terraform state tracks
+right now (`terraform state show`, no provider credentials used):
+
+    stripe_product.headshots      -> prod_VISvkPEoVJ3lPM   (task 07's SECOND generation)
+    stripe_webhook_endpoint.api   -> we_1UHrzY3SzksBW0B3DV4oNARv
+
+This matches docs/GO-LIVE.md and confirms the state was never rolled back to either the
+pre-switch test objects (docs/stripe-test-objects.md) or the orphaned first-generation
+live objects task 07 accidentally created (prod_VISFzDNBbZzaQo, we_..L33..) — see
+docs/GO-LIVE-KEVIN.md finding 1 for what that first generation is and why it still
+matters.
+
+3. fal balance (read-only)
+---------------------------
+    fal balance (USD): 5.8856
+
+Read with one GET to https://rest.alpha.fal.ai/billing/user_balance (docs/verified.md,
+2026-09-17), authenticated with the `fal-key` Secret Manager secret held in memory only
+long enough to build the request header — never printed, logged, or written anywhere.
+No generation was run; this number cannot have moved from any action in this task.
+
+4. What this audit could NOT verify (stated plainly, not guessed)
+-------------------------------------------------------------------
+- Whether the orphaned first-generation webhook endpoint (ends `...L33...`, task 07's
+  accidental first apply) is still enabled in the live Stripe account. Checking that
+  needs the Stripe API (`GET /v1/webhook_endpoints`), which needs the live secret key —
+  this task's rule is to never read a secret value, so this was not checked from here.
+  See docs/GO-LIVE-KEVIN.md for exactly where Kevin clicks to check and fix this by hand
+  in the dashboard, and why fulfilment is not at risk either way.
+- A literal local `terraform plan` against the live Stripe/Cloudflare APIs (see section
+  2 above for why, and what was read instead).
+
+READY: yes
+Reasons:
+  - Production is live (`stripe_mode: "live"`, kill switch off), the one Terraform
+    state tracks the current (second-generation) live Stripe objects and nothing else,
+    both refund webhook events are declared and handled, and CI is green on the current
+    HEAD.
+  - The three "NO" lines above are this task's own in-flight branch/diff and five
+    pre-existing chores unrelated to money or the payment path — none of them are a
+    reason to hold off a single real purchase-and-refund rehearsal.
+  - The one open risk (finding 1 in docs/GO-LIVE-KEVIN.md: the orphaned webhook likely
+    still registered and now signed with a destroyed secret) does not block a purchase
+    or its refund — the app already answers unsigned/mis-signed webhook deliveries with
+    400 and separately fulfils from the redirect, so nothing about the purchase depends
+    on that orphaned endpoint. It only means Kevin should expect, and can ignore or
+    silence, a "webhook endpoint is failing" email from Stripe about a DIFFERENT
+    endpoint than the one this app actually uses.

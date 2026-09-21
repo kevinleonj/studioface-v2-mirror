@@ -296,11 +296,15 @@ function Waiting() {
         </p>
       ) : null}
 
+      {/* task 12. No photo exists client-side here — this page is opened fresh from a
+          link, nothing was ever uploaded in this browser — so the same sf-wait
+          treatment (globals.css) dims and pulses the empty frame itself rather than a
+          photograph. */}
       <div className="mt-[var(--s3)] grid grid-cols-2 gap-[var(--s2)] lg:grid-cols-4">
         {FRAMES.map((n) => (
           <div
             key={n}
-            className="flex aspect-[4/5] items-end border border-[color:var(--border)] bg-[color:var(--secondary)] p-[var(--s2)]"
+            className="sf-wait flex aspect-[4/5] items-end border border-[color:var(--border)] bg-[color:var(--secondary)] p-[var(--s2)]"
           >
             <span className="text-sm text-[color:var(--muted-foreground)]">
               Foto {n} de 4

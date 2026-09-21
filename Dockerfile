@@ -27,4 +27,20 @@ COPY app ./app
 RUN pip install --no-cache-dir --require-hashes -r requirements.lock  && pip install --no-cache-dir --no-deps .
 COPY --from=web /web/out ./static
 ENV PORT=8080 STATIC_DIR=/srv/static
-CMD ["sh", "-c", "uvicorn app.entry:app --host 0.0.0.0 --port ${PORT}"]
+# Cloud Run terminates TLS itself and proxies the request to the container as plain
+# HTTP/1, naming the real scheme in X-Forwarded-Proto (Google's own container-contract
+# and triggering/https-request pages, docs/verified.md 13b). uvicorn's --proxy-headers
+# is already the CLI default (uvicorn/main.py), but it only reads that header from a
+# connecting address in --forwarded-allow-ips, which itself defaults to 127.0.0.1,::1
+# (uvicorn's own docs/settings.md, docs/verified.md 13a) - never Cloud Run's address -
+# so the header was always ignored and Starlette built redirects from the literal
+# (plain-http) connection scheme instead. Both flags are named explicitly so the
+# second one is not a silent no-op.
+#
+# "*" trusts every connecting address. Google does NOT publish a fixed source-IP range
+# for Cloud Run's internal proxy to pin here instead (checked and found absent,
+# docs/verified.md 13c) - this is our own inference from the ingress path Google does
+# document (GFE -> HTTP proxy -> app server, securing/security), not a vendor claim:
+# nothing reaches this container except through that path, so there is no untrusted
+# caller for a narrower list to exclude.
+CMD ["sh", "-c", "uvicorn app.entry:app --host 0.0.0.0 --port ${PORT} --proxy-headers --forwarded-allow-ips='*'"]

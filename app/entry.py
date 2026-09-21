@@ -19,7 +19,7 @@ from app.adapters.ga4 import Ga4Purchase
 from app.adapters.gcs import signed_url_maker, source_uploader
 from app.adapters.pubsub_push import pubsub_verifier
 from app.adapters.turnstile import verify_turnstile
-from app.config import Settings
+from app.config import Settings, stripe_mode
 from app.core import Order, OrderStore, Pipeline, Refund, threaded_batch
 from app.guards import RateLimiter
 from app.logs import configure_logging, id_prefix, log_call
@@ -46,7 +46,7 @@ def _enqueue_factory(s: Settings):
                 }
             },
         )
-        logger.info("enqueued order_id=%s queue=%s", order_id, s.tasks_queue)
+        logger.info("enqueued order_id=%s queue=%s", id_prefix(order_id), s.tasks_queue)
 
     return enqueue
 
@@ -202,7 +202,7 @@ def _stripe_refund(s: Settings):
         )
         logger.info(
             "refund requested order_id=%s refund_id=%s status=%s cents=%s",
-            order_id,
+            id_prefix(order_id),
             r.id,
             r.status,
             amount_cents,
@@ -248,7 +248,7 @@ class FirestoreOrderStore(OrderStore):
         self.db.collection("orders").document(order.id).set(asdict(order))
         logger.info(
             "order stored order_id=%s status=%s outputs=%d",
-            order.id,
+            id_prefix(order.id),
             order.status,
             len(order.outputs),
         )
@@ -284,6 +284,10 @@ def build(settings: Settings | None = None) -> object:
     # was "cause unknown from outside".
     configure_logging()
     s = settings or Settings.from_env()
+    # F/task 06: the payment mode visible without exposing anything else about the
+    # key. logger.info, not print — module-level named logger, one line, once.
+    mode = stripe_mode(s.stripe_secret_key)
+    logger.info("stripe_mode=%s", mode)
     db = firestore.Client(project=s.project)
     gcs = storage.Client(project=s.project)
     sign_url = signed_url_maker(gcs)
@@ -329,6 +333,7 @@ def build(settings: Settings | None = None) -> object:
         create_checkout=_checkout_factory(s),
         static_dir=s.static_dir,
         docs=s.enable_docs,
+        stripe_mode=mode,
     )
 
 
