@@ -191,6 +191,17 @@ def test_tests_that_scan_product_source_strip_comments_first():
         # strip) and demo_server.PLACEHOLDERS, a plain list checked by membership, not by
         # a pattern that could also match a comment.
         "test_favicon.py",
+        # Compares two built artefacts (frontend/out) against each other and against
+        # sitemap.xml; HTML has no comments carrying our rationale. Its one product-source
+        # scan (ad-landing.tsx, checking the shared uploader is imported) goes through
+        # strip_comments explicitly.
+        "test_ad_landing_pages.py",
+        # Reads docs/ads/rsa.json (JSON data, no comments to strip) and built export
+        # HTML pages (frontend/out), same as test_ad_landing_pages.py above; runs
+        # scripts/check_ad_copy.py and scripts/check_ad_claims.py as subprocesses
+        # rather than reading their source.
+        "test_check_ad_copy.py",
+        "test_check_ad_claims.py",
     }
     sources = re.compile(r'"(?:app|scripts|frontend)"|/\s*"src"|"(?:tsx|py)"')
     offenders = []

@@ -121,3 +121,26 @@ def source_uploader(client: Any, bucket_name: str) -> Callable[[str, bytes], str
         return f"gs://{bucket_name}/{key}"
 
     return put
+
+
+def preview_resigner(
+    client: Any, bucket_name: str, sign_url: Callable[[str], str]
+) -> Callable[[str], str | None]:
+    """Task 30, preview-survives: batch id -> a fresh signed address for that
+    batch's stored free-preview result, or None when it never produced one (a
+    store-only handle, or an unknown batch). app/preview.py's `Preview.__call__`
+    always writes the result to this exact key, `previews/{batch}/preview.jpg`, in
+    the OUTPUT bucket (`s.bucket_out` — sources live in `s.bucket_src` instead), so
+    this checks that one object and signs it again rather than trusting the caller."""
+    bucket = client.bucket(bucket_name)
+
+    def resign(batch: str) -> str | None:
+        key = f"previews/{batch}/preview.jpg"
+        started = time.monotonic()
+        found = bucket.blob(key).exists()
+        log_call(logger, "storage.preview_exists", started, detail=key)
+        if not found:
+            return None
+        return sign_url(f"gs://{bucket_name}/{key}")
+
+    return resign

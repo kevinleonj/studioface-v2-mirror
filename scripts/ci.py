@@ -91,6 +91,26 @@ def steps() -> list[Step]:
         Step("playwright browser", "ci", [py, "-m", "playwright", "install", "chromium"]),
         Step("pytest", "ci", [py, "-m", "pytest", "-q"]),
         Step("workflow lint", "ci", [py, os.path.join(ROOT, "scripts", "workflow_lint.py")]),
+        # Task 24. check_ad_claims.py (every price/duration an ad promises must appear
+        # on the page it points to) is NOT a Step here, deliberately, same reason the
+        # design audit once was not (17 Sep entry above): it fails today. The
+        # ad-landing pages show only 3 of 5 shared FAQ questions
+        # (frontend/src/content/ad-pages.ts) and the retention one, which backs the
+        # "7 días" claim in docs/ads/rsa.json, is not one of them — a real,
+        # pre-existing gap this task found but was not asked to fix. Its logic is
+        # still exercised by the mirrored pytest step above
+        # (tests/test_check_ad_claims.py), including the real-export case, marked
+        # xfail(strict=False) so the gap stays visible without blocking every commit.
+        # docs/ads/CAMPAIGN.md records it as an open item for Kevin.
+        Step(
+            "ad copy limits",
+            "ci",
+            [
+                py,
+                os.path.join(ROOT, "scripts", "check_ad_copy.py"),
+                os.path.join(ROOT, "docs", "ads", "rsa.json"),
+            ],
+        ),
         Step(
             "npm ci",
             "design",

@@ -101,7 +101,15 @@ class _FirestoreClient:
         return _Collection()
 
 
-def _fake_stripe():
+class _FakePrice:
+    """What stripe.Price.retrieve() hands back. livemode is a plain bool attribute on
+    the real Price object, same as on Balance (docs/verified.md, 2026-09-17)."""
+
+    def __init__(self, livemode: bool = False) -> None:
+        self.livemode = livemode
+
+
+def _fake_stripe(price_livemode: bool = False, price_raises: bool = False):
     stripe = types.ModuleType("stripe")
     stripe.api_key = ""
 
@@ -112,6 +120,23 @@ def _fake_stripe():
     stripe.checkout = types.SimpleNamespace(Session=types.SimpleNamespace())
     stripe.Refund = types.SimpleNamespace()
     stripe.Webhook = types.SimpleNamespace()
+
+    class _RequestsClient:
+        """Doubles stripe.RequestsClient so _price_is_live's explicit timeout wiring
+        can run with no real socket. Real signature: RequestsClient(timeout=...)."""
+
+        def __init__(self, *a, **k):
+            pass
+
+    stripe.RequestsClient = _RequestsClient
+    stripe.default_http_client = None
+
+    def _retrieve(price_id):
+        if price_raises:
+            raise RuntimeError("stripe unreachable")
+        return _FakePrice(livemode=price_livemode)
+
+    stripe.Price = types.SimpleNamespace(retrieve=_retrieve)
     return stripe
 
 
@@ -264,6 +289,90 @@ def test_the_session_retriever_uses_the_supported_stripe_call(built):
     assert ".to_dict()" in source, "the retriever is not using the supported call"
     assert "dict(stripe.checkout" not in source, "dict(session) is back"
     assert "stripe.error." not in source, "the removed stripe.error shim is back"
+
+
+# --------------------------------------------- task 21: stripe_price_live at startup
+
+
+def test_the_price_livemode_is_retrieved_once_and_wired_into_health(built):
+    """Task 21, at the composition root (CLAUDE.md lesson 8): the fixture's fake Stripe
+    Price answers livemode=False (the fixture's default), so build() must have called
+    it and carried the answer into the real Deps, not left the field at its default."""
+    deps = None
+    for route in built.routes:
+        closure = getattr(getattr(route, "endpoint", None), "__closure__", None) or ()
+        for cell in closure:
+            candidate = getattr(cell, "cell_contents", None)
+            if hasattr(candidate, "stripe_price_live"):
+                deps = candidate
+                break
+        if deps is not None:
+            break
+    assert deps is not None, "no route closure carries Deps"
+    assert deps.stripe_price_live is False
+
+
+def _settings(price_eur: object = "price_123") -> object:
+    """A real Settings object, built with no network — Settings.from_env only reads a
+    dict. price_eur=None reproduces STRIPE_PRICE_EUR never having reached Cloud Run."""
+    from app.config import Settings
+
+    env = dict(ENV)
+    if price_eur is None:
+        env.pop("STRIPE_PRICE_EUR", None)
+    else:
+        env["STRIPE_PRICE_EUR"] = price_eur
+    return Settings.from_env(env)
+
+
+def test_price_is_live_true_when_stripe_reports_livemode_true(monkeypatch):
+    """Twin one of two: the exact state that makes checkout work."""
+    monkeypatch.delitem(sys.modules, "app.entry", raising=False)
+    monkeypatch.setitem(sys.modules, "stripe", _fake_stripe(price_livemode=True))
+    from app import entry
+
+    assert entry._price_is_live(_settings()) is True
+
+
+def test_price_is_live_false_when_stripe_reports_livemode_false(monkeypatch):
+    """Twin two of two: the exact outage this task closes — a live key, a test price —
+    must not be reported as live."""
+    monkeypatch.delitem(sys.modules, "app.entry", raising=False)
+    monkeypatch.setitem(sys.modules, "stripe", _fake_stripe(price_livemode=False))
+    from app import entry
+
+    assert entry._price_is_live(_settings()) is False
+
+
+def test_price_is_live_false_and_does_not_raise_when_the_retrieval_fails(monkeypatch, caplog):
+    """A hung or failed startup call must never take the container down: it answers
+    False and logs why, never a traceback that crashes the caller."""
+    monkeypatch.delitem(sys.modules, "app.entry", raising=False)
+    monkeypatch.setitem(sys.modules, "stripe", _fake_stripe(price_raises=True))
+    from app import entry
+
+    with caplog.at_level(logging.WARNING, logger="app.entry"):
+        result = entry._price_is_live(_settings())
+    assert result is False
+    messages = " ".join(caplog.messages)
+    assert "stripe_price_live" in messages
+    assert ENV["STRIPE_SECRET_KEY"] not in messages
+
+
+def test_price_is_live_false_when_no_price_is_configured(monkeypatch):
+    """STRIPE_PRICE_EUR ships unset before Terraform sets it (HANDOFF, 17 Sep); there is
+    nothing to retrieve, so this must answer False without ever calling Stripe."""
+    monkeypatch.delitem(sys.modules, "app.entry", raising=False)
+
+    def _must_not_be_called(price_id):
+        raise AssertionError("no price is configured; Stripe must not be called")
+
+    fake = _fake_stripe()
+    fake.Price = types.SimpleNamespace(retrieve=_must_not_be_called)
+    monkeypatch.setitem(sys.modules, "stripe", fake)
+    from app import entry
+
+    assert entry._price_is_live(_settings(price_eur=None)) is False
 
 
 if __name__ == "__main__":

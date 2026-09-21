@@ -28,6 +28,7 @@ import re
 import sys
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
@@ -577,6 +578,79 @@ def _same_origin(base: str, requests: list[str]) -> tuple[str, str, str]:
     )
 
 
+# ------------------------------------------------------------- the thumbnails link
+
+FIXTURE_FACE = Path(__file__).resolve().parent.parent / "tests" / "fixtures" / "faces" / "face.jpg"
+
+# Runs in the page before any navigation, so it is listening from the very first byte.
+CSP_VIOLATION_SPY = """
+window.__sfCspViolations = [];
+document.addEventListener('securitypolicyviolation', (e) => {
+  window.__sfCspViolations.push(e.violatedDirective + ' ' + e.blockedURI);
+});
+"""
+
+
+def check_upload_thumbnails(base: str, fixture: Path = FIXTURE_FACE) -> tuple[str, str]:
+    """86513fe, from outside, with a real file and a real screen — not a grep of the
+    bundle. `scripts/check.py upload_thumbnails` stayed green through the whole defect
+    because it only searched the downloaded code for the `data-sf-thumbs` marker; a
+    marker in the bundle is not a picture on the screen. The browser refused every
+    `blob:` thumbnail because `img-src` never named that scheme, and no check ever
+    looked at what the visitor actually saw.
+
+    This chooses the fixture photo, waits for the thumbnail the browser paints, and
+    reads `naturalWidth` off the real `<img>` element — a blocked image reports 0,
+    loaded or not. It also reads back whether the page's own Content-Security-Policy
+    fired a `securitypolicyviolation` event while doing it, so a future scheme this
+    check does not know to name by number is still caught by name.
+
+    Stops here: it never touches the submit button, so unlike check_preview below it
+    costs nothing and sends nothing — choosing a file and waiting for a thumbnail
+    happens entirely in the browser and never reaches the server.
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return BLOCKED, "playwright is not installed here"
+
+    if not fixture.is_file():
+        return FAIL, f"no fixture photo at {fixture}"
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 390, "height": 844})
+        try:
+            page.add_init_script(CSP_VIOLATION_SPY)
+            page.goto(base + "/", wait_until="load", timeout=int(TIMEOUT_S * 1000))
+            file_input = page.locator("#sf-files")
+            if file_input.count() == 0:
+                return FAIL, "no #sf-files file input on the deployed page"
+            file_input.set_input_files(str(fixture))
+            page.wait_for_selector("[data-sf-thumbs] img", timeout=int(TIMEOUT_S * 1000))
+            page.wait_for_function(
+                "() => { const i = document.querySelector('[data-sf-thumbs] img');"
+                " return !!i && i.complete; }",
+                timeout=int(TIMEOUT_S * 1000),
+            )
+            natural_width = page.evaluate(
+                "() => { const i = document.querySelector('[data-sf-thumbs] img');"
+                " return i ? i.naturalWidth : 0; }"
+            )
+            violations = page.evaluate("() => window.__sfCspViolations || []")
+        finally:
+            browser.close()
+
+    if violations:
+        return FAIL, f"{len(violations)} securitypolicyviolation event(s): {violations[:4]}"
+    if not natural_width:
+        return FAIL, f"thumbnail naturalWidth is {natural_width}; the browser drew nothing"
+    return (
+        OK,
+        f"thumbnail naturalWidth={natural_width}, 0 securitypolicyviolation events",
+    )
+
+
 # ---------------------------------------------------------------- the preview link
 
 
@@ -651,6 +725,8 @@ def main() -> None:
     else:
         if not args.no_browser:
             browser_checks(base, result)
+            status, evidence, secs = timed(check_upload_thumbnails, base, FIXTURE_FACE)
+            result.add(Check("upload thumbnails render", status, evidence, secs))
         status, evidence, secs = timed(check_preview, base, args.turnstile_token)
         result.add(Check("free preview", status, evidence, secs))
 

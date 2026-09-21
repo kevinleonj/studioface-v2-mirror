@@ -326,5 +326,52 @@ def test_the_uploader_button_is_still_the_one_that_submits():
     assert page["cta"]["top"] >= page["uploader"]["top"], "the submit left the uploader"
 
 
+# ---------------------------------------------------------------------------- Task 23
+# The two Google Ads landing pages, /foto-cv/ and /foto-linkedin/, are built from the
+# same shared component as home's fold (Comparador, FoldCta, UploadForm — see
+# frontend/src/components/ad-landing.tsx), so scripts/ui_snapshot.py's TARGETS resolve
+# the same "foldCta" and "banner" selectors against them with no new selector to write.
+# This reuses U5's own assertion (test_it_clears_the_consent_banner above) rather than a
+# second copy of it.
+
+AD_PAGES = ("foto-cv", "foto-linkedin")
+
+
+def ad_page(name: str, viewport: str, state: str = "first-visit") -> dict:
+    return geometry()["pages"][f"chromium/{viewport}/{name}"][state]
+
+
+@pytest.mark.parametrize("viewport", [*MOBILE, DESKTOP])
+@pytest.mark.parametrize("page_name", AD_PAGES)
+def test_the_ad_page_first_screen_button_clears_the_consent_banner(page_name, viewport):
+    """The brief's acceptance for /foto-cv/ and /foto-linkedin/, at all three viewports:
+    with the banner open on a first visit, the first-screen button's bottom edge is
+    above the banner's top edge — the exact U5 assertion, against the ad pages."""
+    data = ad_page(page_name, viewport)
+    cta, banner = data["foldCta"], data["banner"]
+    assert cta is not None and cta["visible"], f"{page_name}@{viewport}: no first-screen button"
+    assert banner is not None, f"{page_name}@{viewport}: no consent banner on a first visit"
+    assert cta["bottom"] <= banner["top"], (
+        f"{page_name}@{viewport}: button ends at {cta['bottom']:.0f}, "
+        f"banner starts at {banner['top']:.0f}"
+    )
+
+
+@pytest.mark.parametrize("viewport", [*MOBILE, DESKTOP])
+@pytest.mark.parametrize("page_name", AD_PAGES)
+def test_the_ad_page_button_clears_the_banner_by_exactly_the_home_page_margin(page_name, viewport):
+    """ "Exactly as on the home page" (the brief's own words) is a stronger claim than
+    "also clears it": the numbers should match home's to the pixel, since the two ad
+    pages render the identical shared component with the identical banner."""
+    home_data = home(viewport)
+    ad_data = ad_page(page_name, viewport)
+    assert ad_data["foldCta"]["bottom"] == home_data["foldCta"]["bottom"], (
+        f"{page_name}@{viewport}: CTA bottom differs from home's"
+    )
+    assert ad_data["banner"]["top"] == home_data["banner"]["top"], (
+        f"{page_name}@{viewport}: banner top differs from home's"
+    )
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

@@ -2,6 +2,11 @@
 
 Limits verified 19 September 2026 at https://support.google.com/google-ads/answer/7684791:
 headline 30 characters (up to 15), description 90 characters (up to 4), path 15 characters (2).
+
+Task 24: rsa.json now holds two ad groups (cv, linkedin), each with its own headlines,
+descriptions and path — so every group is validated independently, and "no duplicates"
+means no duplicates INSIDE one group. The same headline reused across the two groups
+(e.g. "Prueba gratis, sin registro") is not a violation.
 """
 
 from __future__ import annotations
@@ -13,17 +18,24 @@ from pathlib import Path
 LIMITS = {"headlines": (30, 15), "descriptions": (90, 4), "path": (15, 2)}
 
 
-def find_violations(assets: dict) -> list[str]:
+def find_group_violations(name: str, group: dict) -> list[str]:
     violations: list[str] = []
     for field, (max_characters, max_items) in LIMITS.items():
-        items = assets.get(field, [])
+        items = group.get(field, [])
         if len(items) > max_items:
-            violations.append(f"{field}: {len(items)} items, limit {max_items}")
+            violations.append(f"{name}/{field}: {len(items)} items, limit {max_items}")
         if len(set(items)) != len(items):
-            violations.append(f"{field}: duplicate entries")
+            violations.append(f"{name}/{field}: duplicate entries")
         for text in items:
             if len(text) > max_characters:
-                violations.append(f"{field}: {len(text)}/{max_characters} '{text}'")
+                violations.append(f"{name}/{field}: {len(text)}/{max_characters} '{text}'")
+    return violations
+
+
+def find_violations(data: dict) -> list[str]:
+    violations: list[str] = []
+    for group in data.get("ad_groups", []):
+        violations.extend(find_group_violations(group.get("name", "?"), group))
     return violations
 
 

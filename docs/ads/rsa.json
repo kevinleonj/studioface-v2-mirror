@@ -1,74 +1,124 @@
 {
-  "final_url": "https://studioface.app/",
-  "path": [
-    "foto-perfil",
-    "linkedin"
-  ],
-  "headlines": [
-    "Foto de perfil profesional IA",
-    "Tu foto de LinkedIn con IA",
-    "4 fotos profesionales 19,99 €",
-    "Prueba gratis, sin registro",
-    "Foto para CV en dos minutos",
-    "Sin fotógrafo ni estudio",
-    "Paga solo si te gusta",
-    "Hecho con tus propios selfies",
-    "Tu cara, sin retoques falsos",
-    "Pago único, IVA incluido",
-    "Foto corporativa con IA",
-    "Retrato profesional online",
-    "Mira el resultado antes",
-    "StudioFace: fotos con IA",
-    "Listas para LinkedIn y CV"
-  ],
-  "descriptions": [
-    "Sube de 1 a 4 selfies y mira una prueba gratis. Sin registro y sin tarjeta para probar.",
-    "Cuatro retratos profesionales por 19,99 €, IVA incluido. Pago único, sin suscripción.",
-    "Cambiamos la luz, el fondo y la ropa, no tu cara. Compruébalo gratis antes de pagar.",
-    "Tus fotos se borran a los 7 días. Si no generamos las cuatro, devolución automática."
-  ],
-  "keywords": {
-    "exact": [
-      "foto profesional ia",
-      "foto perfil profesional ia",
-      "foto linkedin ia",
-      "foto cv ia",
-      "fotos profesionales con ia",
-      "foto corporativa ia",
-      "headshot ia",
-      "retrato profesional ia",
-      "foto de perfil linkedin profesional",
-      "foto para curriculum ia"
-    ],
-    "negative_phrase": [
-      "gratis",
-      "free",
-      "generador de imagenes",
-      "crear imagenes",
-      "dibujo",
-      "anime",
-      "avatar",
-      "logo",
-      "fondo de pantalla",
-      "midjourney",
-      "chatgpt",
-      "gemini",
-      "canva",
-      "photoshop",
-      "app",
-      "apk",
-      "descargar",
-      "fotografo",
-      "estudio fotografico",
-      "boda",
-      "carnet",
-      "dni",
-      "pasaporte",
-      "quitar fondo",
-      "mejorar calidad",
-      "restaurar foto",
-      "video"
-    ]
+  "status": "Keywords and bids verified in Google Keyword Planner, account 764-083-6811, Spain, Spanish, 20 September 2026. Click-to-buy rate unmeasured.",
+  "campaign": {
+    "type": "Search only",
+    "networks": "Google Search only, no partners, no Display",
+    "location": "Spain",
+    "language": "Spanish",
+    "total_cap_eur": 50,
+    "bidding": "OPEN: Kevin decides"
   },
-  "status": "DRAFT: volumes and click costs unmeasured until Keyword Planner Test A"
+  "ad_groups": [
+    {
+      "name": "cv",
+      "final_url": "https://studioface.app/foto-cv/",
+      "path": [
+        "foto-cv",
+        "gratis"
+      ],
+      "keywords_exact": [
+        "foto curriculum",
+        "foto cv",
+        "foto para curriculum",
+        "foto de curriculum"
+      ],
+      "headlines": [
+        "Foto para tu CV con IA",
+        "Prueba gratis, sin registro",
+        "Tu foto de currículum lista",
+        "Foto de CV en dos minutos",
+        "Sin fotógrafo ni estudio",
+        "Paga solo si te gusta",
+        "4 fotos para CV por 19,99 €",
+        "Hecha con tus propios selfies",
+        "Pago único, IVA incluido",
+        "Mira el resultado antes",
+        "Foto profesional para el CV",
+        "StudioFace: fotos con IA"
+      ],
+      "descriptions": [
+        "Sube de 1 a 4 selfies y mira una prueba gratis. Sin registro y sin tarjeta para probar.",
+        "Cuatro fotos profesionales para tu currículum por 19,99 €, IVA incluido. Pago único.",
+        "Cambiamos la luz, el fondo y la ropa, no tu cara. Compruébalo gratis antes de pagar.",
+        "Tus fotos se borran a los 7 días. Si no generamos las cuatro, devolución automática."
+      ]
+    },
+    {
+      "name": "linkedin",
+      "final_url": "https://studioface.app/foto-linkedin/",
+      "path": [
+        "foto-linkedin",
+        "gratis"
+      ],
+      "keywords_exact": [
+        "foto linkedin",
+        "foto para linkedin",
+        "foto perfil linkedin",
+        "foto profesional linkedin",
+        "foto profesional para linkedin"
+      ],
+      "headlines": [
+        "Tu foto de LinkedIn con IA",
+        "Prueba gratis, sin registro",
+        "Foto de perfil profesional",
+        "Foto LinkedIn en dos minutos",
+        "Sin fotógrafo ni estudio",
+        "Paga solo si te gusta",
+        "4 fotos LinkedIn por 19,99 €",
+        "Hecha con tus propios selfies",
+        "Pago único, IVA incluido",
+        "Mira el resultado antes",
+        "Foto profesional para LinkedIn",
+        "StudioFace: fotos con IA"
+      ],
+      "descriptions": [
+        "Sube de 1 a 4 selfies y mira una prueba gratis. Sin registro y sin tarjeta para probar.",
+        "Cuatro fotos profesionales para tu perfil por 19,99 €, IVA incluido. Pago único.",
+        "Cambiamos la luz, el fondo y la ropa, no tu cara. Compruébalo gratis antes de pagar.",
+        "Tus fotos se borran a los 7 días. Si no generamos las cuatro, devolución automática."
+      ]
+    }
+  ],
+  "negative_keywords_phrase": [
+    "gratis online",
+    "free",
+    "generador de imagenes",
+    "crear imagenes",
+    "dibujo",
+    "anime",
+    "avatar",
+    "logo",
+    "fondo de pantalla",
+    "midjourney",
+    "chatgpt",
+    "gemini",
+    "canva",
+    "photoshop",
+    "prompt",
+    "app",
+    "apk",
+    "descargar",
+    "fotografo",
+    "estudio fotografico",
+    "boda",
+    "carnet",
+    "dni",
+    "pasaporte",
+    "quitar fondo",
+    "mejorar calidad",
+    "restaurar foto",
+    "video",
+    "plantilla",
+    "word",
+    "pdf",
+    "ejemplo",
+    "sin foto",
+    "tamaño",
+    "medidas",
+    "fondo",
+    "portada",
+    "cv con foto",
+    "pinterest",
+    "meme"
+  ]
 }

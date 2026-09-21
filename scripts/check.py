@@ -141,12 +141,22 @@ def waiting_state() -> list[str]:
     )
 
 
-def stripe_mode() -> str:
+def health() -> dict:
     _, body = get("/health")
     try:
-        return str(json.loads(body).get("stripe_mode", ""))
+        return json.loads(body)
     except ValueError:
-        return ""
+        return {}
+
+
+def stripe_mode() -> str:
+    return str(health().get("stripe_mode", ""))
+
+
+def stripe_price_live() -> bool:
+    """Task 21: what Stripe itself says about the configured price's livemode, not
+    just the key's prefix — see stripe_live's own docstring for why that gap matters."""
+    return health().get("stripe_price_live") is True
 
 
 def stripe_mode_reported() -> list[str]:
@@ -157,8 +167,14 @@ def stripe_mode_reported() -> list[str]:
 
 
 def stripe_live() -> list[str]:
+    """Task 21: stripe_mode alone was green BEFORE the live switch, because a live key
+    and a still-test price both leave stripe_mode == 'live' — the key's prefix says
+    nothing about the price. Refuses unless BOTH are live."""
     mode = stripe_mode()
-    return [f"/health reports stripe_mode '{mode}', wanted live"] * (mode != "live")
+    price_live = stripe_price_live()
+    problems = [f"/health reports stripe_mode '{mode}', wanted live"] * (mode != "live")
+    problems += ["/health reports stripe_price_live false, wanted true"] * (not price_live)
+    return problems
 
 
 CHECKS = {

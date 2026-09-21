@@ -21,7 +21,10 @@ import { PRICE_LABEL } from "@/lib/config";
 
 export const IDENTITY_Q = "¿Me voy a parecer a mí?";
 
-const FAQ = [
+// Exported (task 23) so the ad landing pages can pick a matching subset of THESE SAME
+// question/answer pairs, rather than a second copy of the copy — one source of truth
+// for what each question answers, wherever it is shown.
+export const FAQ = [
   {
     q: IDENTITY_Q,
     a:
@@ -53,10 +56,14 @@ const FAQ = [
   },
 ];
 
-export function Faq() {
+// `only`: an ad landing page shows three questions, not all five (task 23). Filtering
+// here, rather than each caller re-typing a `.filter()`, keeps the ordering rule (the
+// identity objection first, docs/CONVERSION.md H2) in exactly one place.
+export function Faq({ only }: { only?: readonly string[] }) {
+  const items = only ? FAQ.filter((item) => only.includes(item.q)) : FAQ;
   return (
     <div className="mt-[var(--s3)] grid gap-0 sm:grid-cols-2 sm:gap-x-[var(--s4)]">
-      {FAQ.map((item) => (
+      {items.map((item) => (
         <details
           key={item.q}
           className="border-b border-[color:var(--border)] py-[var(--s2)]"

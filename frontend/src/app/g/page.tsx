@@ -54,6 +54,22 @@ export default function GalleryPage() {
   // NOTFOUND_GRACE_MS) without the server having to lie about whether the order exists.
   const startedAt = useRef(Date.now());
 
+  // Task 30, preview-survives. This page is only ever reached after a Checkout
+  // Session paid — /api/gracias (app/main.py) redirects here solely once Stripe's
+  // own payment_status is FULFILLABLE — or through a recovery link for an order
+  // already paid before. Either way, upload-form.tsx's free-preview handle in
+  // sessionStorage is for a purchase now made and must not resurface on a later
+  // visit to the home page. The key literal must match upload-form.tsx's
+  // HANDLE_STORAGE_KEY exactly; not shared through a module because this is the
+  // only thing either file needs from the other.
+  useEffect(() => {
+    try {
+      sessionStorage.removeItem("sf_preview_handle");
+    } catch {
+      // Nothing to clear if storage is unavailable; nothing else here breaks either.
+    }
+  }, []);
+
   const poll = useCallback(async (order: string, token: string) => {
     try {
       const res = await fetch(`/api/orders/${order}/${token}`);

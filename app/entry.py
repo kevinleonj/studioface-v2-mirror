@@ -16,7 +16,7 @@ from app import emails
 from app.adapters.fal import FalModel
 from app.adapters.firestore_counter import FirestoreCounter
 from app.adapters.ga4 import Ga4Purchase
-from app.adapters.gcs import signed_url_maker, source_uploader
+from app.adapters.gcs import preview_resigner, signed_url_maker, source_uploader
 from app.adapters.pubsub_push import pubsub_verifier
 from app.adapters.turnstile import verify_turnstile
 from app.config import Settings, stripe_mode
@@ -95,6 +95,48 @@ def _resend(s: Settings):
         )
 
     return send
+
+
+PRICE_RETRIEVE_TIMEOUT_S = 5.0
+
+
+def _price_is_live(s: Settings) -> bool:
+    """Read-only GET of the configured Stripe Price, once, at startup.
+
+    Task 21: /health's stripe_mode only reads the key's PREFIX (app.config.stripe_mode),
+    so it stayed green through the exact outage state — a live key paired with a price
+    still in test mode, which is exactly when checkout is broken — because nothing had
+    ever asked Stripe what the price itself is. Retrieving a Price is a read-only GET:
+    it costs nothing and sends no email.
+
+    Never allowed to stop the container booting: no STRIPE_PRICE_EUR configured, a
+    timed-out or failed call, or any other error all answer False, logged with the
+    reason and never the key or the exception's own text (which could echo request
+    detail back). An explicit timeout bounds the one blocking network call composition
+    makes at startup, so a hung Stripe API can delay a cold start by at most
+    PRICE_RETRIEVE_TIMEOUT_S, never hang it.
+    """
+    if not s.stripe_price_eur:
+        logger.warning("stripe_price_live=false reason=no_price_configured")
+        return False
+    import stripe
+
+    started = time.monotonic()
+    try:
+        # Everything that can fail lives inside this one try: setting up the client is
+        # part of "the retrieval", and a test double or a future stripe-python release
+        # missing RequestsClient must land on the same safe False as a network failure,
+        # not raise past this function and take the container down with it.
+        stripe.api_key = s.stripe_secret_key
+        stripe.default_http_client = stripe.RequestsClient(timeout=PRICE_RETRIEVE_TIMEOUT_S)
+        price = stripe.Price.retrieve(s.stripe_price_eur)
+    except Exception as exc:  # noqa: BLE001 - a startup probe must never crash the container
+        logger.warning("stripe_price_live=false reason=%s", type(exc).__name__)
+        return False
+    log_call(logger, "stripe.price.retrieve", started)
+    live = bool(price.livemode)
+    logger.info("stripe_price_live=%s", live)
+    return live
 
 
 def _session_retriever(s: Settings):
@@ -288,6 +330,10 @@ def build(settings: Settings | None = None) -> object:
     # key. logger.info, not print — module-level named logger, one line, once.
     mode = stripe_mode(s.stripe_secret_key)
     logger.info("stripe_mode=%s", mode)
+    # Task 21: the check the key prefix alone cannot make — what Stripe itself says
+    # about the configured price, retrieved once with an explicit timeout so a hung
+    # call bounds a cold start rather than blocking it.
+    price_live = _price_is_live(s)
     db = firestore.Client(project=s.project)
     gcs = storage.Client(project=s.project)
     sign_url = signed_url_maker(gcs)
@@ -310,19 +356,24 @@ def build(settings: Settings | None = None) -> object:
         secret=s.app_token_secret,
     )
     limiter = RateLimiter(counter=FirestoreCounter(db), salt=s.app_token_secret)
+    # Named so task 29's storage-only path (store_sources_fn=preview.store_only) shares
+    # this exact `put_source` with the full preview (preview_fn=preview) — one adapter,
+    # never two bucket writers that could drift apart.
+    preview = Preview(
+        put_source=source_uploader(gcs, s.bucket_src),
+        model=FalModel(sign=sign_url, resolution="0.5K"),  # the free one is the cheap one
+        # C1: the same two collaborators the gallery uses. `storage.put` downloads
+        # fal's result into the private bucket; `sign_url` reads it back as a
+        # short-lived storage.googleapis.com address, which img-src allows.
+        store_result=out_bucket.put,
+        sign=sign_url,
+    )
     return make_app(
         pipeline,
         limiter,
         enqueue=_enqueue_factory(s),
-        preview_fn=Preview(
-            put_source=source_uploader(gcs, s.bucket_src),
-            model=FalModel(sign=sign_url, resolution="0.5K"),  # the free one is the cheap one
-            # C1: the same two collaborators the gallery uses. `storage.put` downloads
-            # fal's result into the private bucket; `sign_url` reads it back as a
-            # short-lived storage.googleapis.com address, which img-src allows.
-            store_result=out_bucket.put,
-            sign=sign_url,
-        ),
+        preview_fn=preview,
+        store_sources_fn=preview.store_only,
         webhook_secret=s.stripe_webhook_secret,
         tasks_token=s.tasks_token,
         verify_turnstile=lambda token, ip: verify_turnstile(s.turnstile_secret, token, ip),
@@ -334,6 +385,10 @@ def build(settings: Settings | None = None) -> object:
         static_dir=s.static_dir,
         docs=s.enable_docs,
         stripe_mode=mode,
+        stripe_price_live=price_live,
+        # Task 30, preview-survives: the OUTPUT bucket, same as `out_bucket` above —
+        # `Preview.__call__` writes the free-preview result there, never to bucket_src.
+        resign_preview=preview_resigner(gcs, s.bucket_out, sign_url),
     )
 
 

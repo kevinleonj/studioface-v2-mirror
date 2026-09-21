@@ -8,9 +8,12 @@ The runtime check answers the harder question this feature raises: is every blob
 this component creates actually revoked, not just followed somewhere in the file by a
 call to revokeObjectURL that nothing ever runs? A real browser is driven against a copy
 of the built export (docs/DESIGN.md verification protocol #1: never serve the directory
-itself), URL.createObjectURL/revokeObjectURL are spied on from the page, and a second
-file selection is used to prove the FIRST batch of URLs is revoked before or as the
-second batch is created - not merely "revoked eventually".
+itself), URL.createObjectURL/revokeObjectURL are spied on from the page, and removing a
+kept photo with its own button is used to prove the FIRST batch of URLs is revoked
+before or as the remaining photo's fresh URL is created - not merely "revoked
+eventually". Task 27 made picking again an ADD instead of a replace (see
+tests/e2e/test_upload_edges.py), so the remove button is now the only user action that
+takes a photo OUT of the kept set — a second file pick no longer does.
 
 "On unmount" is not driven separately. The effect returns exactly one cleanup function
 (test_the_effect_has_one_cleanup_for_both_paths), and React's own contract is that this
@@ -198,10 +201,17 @@ def _sample_files() -> list[str]:
     return [str(f) for f in files]
 
 
-def test_every_object_url_is_created_once_per_file_and_revoked_on_the_next_change(served):
+def test_every_object_url_is_created_once_per_file_and_revoked_on_removal(served):
     """Real proof, not a read of the source: select two files, see two created URLs and
-    two live thumbnails; select a different one file, see the first two REVOKED - before
-    the component unmounts, purely from the `files` dependency changing."""
+    two live thumbnails; remove one with its own remove button, see the first two
+    REVOKED - before the component unmounts, purely from the `files` dependency
+    changing.
+
+    Task 27 changed what shrinks the kept set: picking again now ADDS (skipping
+    duplicates, tests/e2e/test_upload_edges.py covers that), so re-picking one already
+    kept file no longer removes the other one - the remove button is what does that
+    now, and this test follows it instead of a second file pick.
+    """
     samples = _sample_files()
     with playwright.sync_playwright() as pw:
         browser = pw.chromium.launch()
@@ -218,7 +228,7 @@ def test_every_object_url_is_created_once_per_file_and_revoked_on_the_next_chang
                 "a URL was revoked before any change happened"
             )
 
-            page.set_input_files("#sf-files", [samples[0]])
+            page.get_by_label("Quitar foto 1").click()
             page.wait_for_function("window.__sfUrls.revoked.length >= 2", timeout=5000)
 
             revoked = page.evaluate("window.__sfUrls.revoked.slice()")

@@ -233,6 +233,12 @@ class Deps:
     preview_fn: Callable[[list[bytes], str], str]
     webhook_secret: str
     tasks_token: str
+    # Task 29: the half of preview_fn that never calls the image model — store the
+    # photos, nothing else. Defaults to a no-op so every test file that does not
+    # exercise the storage-only path keeps working unmodified; app/entry.py always
+    # wires the real one (the same Preview instance's `store_only`, so both paths
+    # share one `put_source`).
+    store_sources_fn: Callable[[list[bytes], str], None] = lambda files, batch: None
     verify_turnstile: Callable[[str, str], bool] = lambda token, ip: True
     # Takes the raw Authorization header. Defaults to REFUSING: this endpoint sets the
     # kill switch, and an auth check that defaults to allowing is exactly how it came to
@@ -243,6 +249,11 @@ class Deps:
     retrieve_session: Callable[[str], dict | None] = lambda session_id: None
     sign_url: Callable[[str], str] = lambda url: url
     create_checkout: CreateCheckout | None = None
+    # Task 30, preview-survives: gs://…/previews/{batch}/preview.jpg -> a fresh signed
+    # https address, or None when this batch never produced one (store-only, or
+    # unknown). Defaults to always-None so an unwired deployment fails closed — same
+    # convention as retrieve_session and verify_pubsub above.
+    resign_preview: Callable[[str], str | None] = lambda batch: None
     # Where this deployment's gallery lives. A constant until 20 September, when the
     # paid walk redirected a browser off loopback to the production gallery holding an
     # order that existed only locally (tests/test_after_payment.py).
@@ -250,6 +261,9 @@ class Deps:
     # "test", "live" or "unknown" — app.config.stripe_mode(key), derived from the
     # configured Stripe key's PREFIX only. Never the key itself.
     stripe_mode: str = "unknown"
+    # Task 21: what Stripe itself says about the configured price's livemode, read once
+    # at startup by app.entry._price_is_live. False on any missing config or failure.
+    stripe_price_live: bool = False
 
 
 def make_app(
@@ -259,6 +273,7 @@ def make_app(
     preview_fn: Callable[[list[bytes], str], str],
     webhook_secret: str,
     tasks_token: str,
+    store_sources_fn: Callable[[list[bytes], str], None] = lambda files, batch: None,
     verify_turnstile: Callable[[str, str], bool] = lambda token, ip: True,
     verify_pubsub: Callable[[str], bool] = lambda authorization: False,
     retrieve_session: Callable[[str], dict | None] = lambda session_id: None,
@@ -271,6 +286,8 @@ def make_app(
     # Settings.enable_docs, which is False unless ENABLE_DOCS is set.
     docs: bool = False,
     stripe_mode: str = "unknown",
+    stripe_price_live: bool = False,
+    resign_preview: Callable[[str], str | None] = lambda batch: None,
 ) -> FastAPI:
     d = Deps(
         pipeline,
@@ -279,13 +296,16 @@ def make_app(
         preview_fn,
         webhook_secret,
         tasks_token,
+        store_sources_fn,
         verify_turnstile,
         verify_pubsub,
         retrieve_session,
         sign_url,
         create_checkout,
+        resign_preview,
         gallery_base,
         stripe_mode,
+        stripe_price_live,
     )
     # F8/O9. /docs, /redoc and /openapi.json publish every route, parameter and
     # response shape of the money path - including /internal/generate/{order_id} and
@@ -309,6 +329,7 @@ def make_app(
         return response
 
     _register_preview(app, d)
+    _register_preview_resign(app, d)
     _register_checkout(app, d)
     _register_recovery(app, d)
     _register_thanks(app, d)
@@ -340,40 +361,93 @@ def visitor_address(x_forwarded_for: str, request: Request) -> str:
     An absent, empty, or malformed (e.g. trailing-comma) header falls back to the
     raw socket peer, same as before this function existed.
     """
+    logger.info("visitor_address xff shape=%s", xff_shape(x_forwarded_for))
     last = x_forwarded_for.split(",")[-1].strip()
     return last or _client_ip(request)
+
+
+def _octet_pair(entry: str) -> str:
+    """First two octets of an IPv4-looking entry, or "?" for anything else (a
+    hostname, IPv6 literal, or empty string never has exactly four dot-separated
+    parts). Never returns enough of an address to identify a visitor."""
+    parts = entry.split(".")
+    return ".".join(parts[:2]) if len(parts) == 4 else "?"
+
+
+def xff_shape(x_forwarded_for: str) -> str:
+    """A privacy-safe one-line summary of a raw X-Forwarded-For header.
+
+    Task 20: `visitor_address` keys the preview and /api/recuperar caps on the LAST
+    entry, on the inference (never measured before this task) that Google Front End
+    appends its own observed peer address there. This line lets that inference be
+    checked against Cloud Run's own request log, which carries the real
+    httpRequest.remoteIp for the same request - without ever logging a full
+    address: each entry, if it looks like an IPv4 address, is cut to its first two
+    octets before it is logged.
+    """
+    entries = [e.strip() for e in x_forwarded_for.split(",")] if x_forwarded_for.strip() else []
+    n = len(entries)
+    first = _octet_pair(entries[0]) if n else "?"
+    last = _octet_pair(entries[-1]) if n else "?"
+    comparable = n > 0 and first != "?" and last != "?"
+    return f"entries={n} first={first} last={last} first_eq_last={comparable and first == last}"
 
 
 def _register_preview(app: FastAPI, d: Deps) -> None:
     @app.post("/api/preview")
     async def preview(request: Request, x_forwarded_for: str = Header(default="")):
+        # Task 29, never-block-a-buyer: 21 September, Kevin's own shop hit the free
+        # preview limit and from that moment held no signed handle at all, because
+        # only a successful preview ever minted one — so there was no buy button for
+        # an hour. Storing the photos and signing the handle is now possible WITHOUT
+        # calling the image model, so a visitor at the limit can still pay.
+        #
+        # The human check still runs first, before anything else — unchanged from
+        # task 28 — and only a file the server accepts can ever spend a try or a
+        # stored batch, also unchanged.
         if d.pipeline.store.killswitch:
             raise HTTPException(503, "paused")
         ip = visitor_address(x_forwarded_for, request)
         form = await request.form()
         if not d.verify_turnstile(str(form.get("turnstile_token", "")), ip):
             raise HTTPException(403, "turnstile")
-        ok, why = d.limiter.check(ip, request.headers.get("user-agent", ""))
-        if not ok:
-            raise HTTPException(429, why)
         files = [await f.read() for f in form.getlist("files")]
         try:
             v = validate_uploads(files)
         except ValueError as e:
             raise HTTPException(422, str(e)) from e
-        # The batch id is minted here and signed: it is the only thing the browser is
-        # allowed to hand back at checkout, so it can never name an object itself.
+        user_agent = request.headers.get("user-agent", "")
+        # The batch id is minted here and signed the SAME way whether or not the
+        # model ever runs: /api/checkout only ever checks `preview_token(batch, n,
+        # secret)`, so a handle from the storage-only path is verified identically to
+        # one from a real preview, and a made-up one is refused either way.
         batch, n = uuid4().hex, len(v.accepted)
+        accepted = [b for _, b in v.accepted]
+
+        # storeCurrentPhotosForBuy (frontend/src/components/upload-form.tsx): the buy
+        # button must always sell the photos the visitor currently sees. Re-backing a
+        # purchase with a changed set of photos never needs a new generation — the
+        # visitor already saw one — so it goes straight to the storage-only path
+        # without ever touching the preview budget.
+        store_only = str(form.get("store_only", "")) == "1"
+        if store_only:
+            return _stored_handle(d, ip, user_agent, accepted, batch, n, False, "store_cap")
+
+        ok, why = d.limiter.check(ip, user_agent)
+        if not ok:
+            # Storage is cheap but not free, so this fallback has its own ceiling
+            # (RateLimiter.check_store, 10/visitor/hour) checked inside
+            # _stored_handle. Only once THAT is also spent does a visitor at the
+            # limit meet the real refusal — `why`, the original reason.
+            return _stored_handle(d, ip, user_agent, accepted, batch, n, True, why)
         try:
-            url = d.preview_fn([b for _, b in v.accepted], batch)
+            url = d.preview_fn(accepted, batch)
         except (ModelRefused, ValueError) as e:
-            # F2. Both of these are things the VISITOR got wrong and can fix, and both
-            # used to leave here as HTTP 500 with FastAPI's own body - which the frontend
-            # does not recognise, so both read as "No hemos podido generar la prueba."
-            # `normalise_all` raises ValueError from inside preview_fn, outside the
-            # try/except above, which is why a corrupt file was a 500 as well.
+            # F2. Both are the visitor's to fix, not a 500 with a body the frontend
+            # cannot read. `normalise_all` raises ValueError inside preview_fn.
             detail = e.detail if isinstance(e, ModelRefused) else str(e)
             logger.info("preview refused batch=%s detail=%s", batch, detail)
+            d.limiter.refund(ip, user_agent)  # task 28: not a spent try
             raise HTTPException(422, detail) from e
         return {
             "preview_url": url,
@@ -385,7 +459,59 @@ def _register_preview(app: FastAPI, d: Deps) -> None:
             # showing them one outfit and selling them another.
             "wardrobe": default_wardrobe_key(PREVIEW_STYLE),
             "t": preview_token(batch, n, d.pipeline.secret),
+            "limited": False,
         }
+
+
+def _register_preview_resign(app: FastAPI, d: Deps) -> None:
+    @app.get("/api/preview/{batch}")
+    async def resign_preview(batch: str, n: int = 0, t: str = ""):
+        """Task 30, preview-survives. The signed picture address dies in 15 minutes
+        (GALLERY_TTL, app/adapters/gcs.py), so a reload or a return from Stripe's
+        cancel redirect needs a FRESH one for the SAME stored result — never a new
+        generation, never a new try spent. Verified with the exact same
+        `preview_token` comparison /api/checkout uses, imported from app.core, not a
+        re-implementation: a made-up signature is refused here exactly as it would
+        be at checkout. 404, not 403 — this route names no object the caller does
+        not already hold a valid handle for, so a wrong guess gets the same answer
+        as an unknown one, never a different one that would confirm it was close.
+        """
+        expected = preview_token(batch, n, d.pipeline.secret)
+        if not batch or not hmac.compare_digest(expected, t):
+            raise HTTPException(404)
+        url = d.resign_preview(batch)
+        if url is None:
+            raise HTTPException(404)
+        return {"preview_url": url}
+
+
+def _stored_handle(
+    d: Deps,
+    ip: str,
+    user_agent: str,
+    accepted: list[bytes],
+    batch: str,
+    n: int,
+    limited: bool,
+    refused_reason: str,
+) -> dict:
+    """Store the photos, sign a handle, call nothing that costs money. Bound by
+    `RateLimiter.check_store` (10/visitor/hour): once that is also spent, the real
+    429 carries `refused_reason` — the original preview-limit reason when this was
+    reached because the free previews ran out, or `store_cap` when the visitor asked
+    to store outright (storeCurrentPhotosForBuy)."""
+    if not d.limiter.check_store(ip, user_agent):
+        raise HTTPException(429, refused_reason)
+    d.store_sources_fn(accepted, batch)
+    logger.info("stored batch without generating batch=%s limited=%s", batch, limited)
+    return {
+        "preview_url": None,
+        "batch": batch,
+        "n": n,
+        "wardrobe": default_wardrobe_key(PREVIEW_STYLE),
+        "t": preview_token(batch, n, d.pipeline.secret),
+        "limited": limited,
+    }
 
 
 def _register_checkout(app: FastAPI, d: Deps) -> None:
@@ -542,6 +668,7 @@ def _register_public(app: FastAPI, d: Deps) -> None:
             "ok": True,
             "killswitch": d.pipeline.store.killswitch,
             "stripe_mode": d.stripe_mode,
+            "stripe_price_live": d.stripe_price_live,
         }
 
     @app.post("/api/stripe/webhook")

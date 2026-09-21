@@ -36,3 +36,24 @@ class FirestoreCounter:
             return True
 
         return txn(self.client.transaction())
+
+    def decrement(self, key: str) -> None:
+        """Give back one try (task 28: refund a preview the model refused or failed).
+        A rolled-over window or a count already at 0 is left alone, same rule as
+        MemoryCounter.decrement, so this can never resurrect a stale window or send a
+        document below zero.
+        """
+        ref = self.col.document(key)
+
+        @firestore.transactional
+        def txn(t: firestore.Transaction) -> None:
+            snap = ref.get(transaction=t)
+            if not snap.exists:
+                return
+            d = snap.to_dict()
+            n, exp = d.get("n", 0), d.get("exp", 0)
+            if time.time() >= exp or n <= 0:
+                return
+            t.set(ref, {"n": n - 1, "exp": exp})
+
+        txn(self.client.transaction())

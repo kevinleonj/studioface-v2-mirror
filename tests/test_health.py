@@ -32,7 +32,7 @@ DEPLOY_YML = ROOT / ".github" / "workflows" / "deploy.yml"
 RESERVED_BY_GOOGLE_FRONTEND = {"/healthz"}
 
 
-def build(static_dir=None, stripe_mode="unknown"):
+def build(static_dir=None, stripe_mode="unknown", stripe_price_live=False):
     store = OrderStore()
     pipeline = Pipeline(
         store=store,
@@ -52,6 +52,7 @@ def build(static_dir=None, stripe_mode="unknown"):
         tasks_token="tt",
         static_dir=static_dir,
         stripe_mode=stripe_mode,
+        stripe_price_live=stripe_price_live,
     )
     return TestClient(app), store
 
@@ -69,7 +70,12 @@ def test_health_responds():
     c, _ = build()
     r = c.get(HEALTH_PATH)
     assert r.status_code == 200
-    assert r.json() == {"ok": True, "killswitch": False, "stripe_mode": "unknown"}
+    assert r.json() == {
+        "ok": True,
+        "killswitch": False,
+        "stripe_mode": "unknown",
+        "stripe_price_live": False,
+    }
 
 
 def test_health_reports_the_killswitch():
@@ -79,6 +85,7 @@ def test_health_reports_the_killswitch():
         "ok": True,
         "killswitch": True,
         "stripe_mode": "unknown",
+        "stripe_price_live": False,
     }
 
 
@@ -92,6 +99,21 @@ def test_health_reports_the_stripe_mode_live():
     hard-coded to 'test' and still pass."""
     c, _ = build(stripe_mode="live")
     assert c.get(HEALTH_PATH).json()["stripe_mode"] == "live"
+
+
+def test_health_reports_stripe_price_live_true():
+    """Task 21, twin one of two. stripe_mode alone stayed green through the exact
+    outage state — a live key paired with a still-test price — because it only reads
+    the key's prefix. This field is the one Stripe itself can answer."""
+    c, _ = build(stripe_price_live=True)
+    assert c.get(HEALTH_PATH).json()["stripe_price_live"] is True
+
+
+def test_health_reports_stripe_price_live_false():
+    """Twin two of two: identical wiring, the other bool, so this field cannot be
+    hard-coded to True and still pass."""
+    c, _ = build(stripe_price_live=False)
+    assert c.get(HEALTH_PATH).json()["stripe_price_live"] is False
 
 
 def test_the_old_reserved_path_is_gone_rather_than_left_as_a_decoy():

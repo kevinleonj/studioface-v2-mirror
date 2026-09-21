@@ -218,6 +218,12 @@ def build_funnel_app(static_dir: Path, storage_dir: Path, base: str) -> Any:
         track_conversion=lambda order: None,
         secret=secretslib.token_hex(16),
     )
+    preview = Preview(
+        put_source=storage.put_source_for_fal,
+        model=FalModel(sign=storage.sign_for_fal, resolution="0.5K"),
+        store_result=storage.put,
+        sign=storage.sign,
+    )
     app = make_app(
         pipeline,
         # The walk makes three or four previews in a row from one address, which the
@@ -227,12 +233,10 @@ def build_funnel_app(static_dir: Path, storage_dir: Path, base: str) -> Any:
         # failed with "Has alcanzado el limite de pruebas gratuitas".
         RateLimiter(counter=MemoryCounter(), per_client=50, per_subnet=200),
         enqueue=_enqueue_local(base, tasks),
-        preview_fn=Preview(
-            put_source=storage.put_source_for_fal,
-            model=FalModel(sign=storage.sign_for_fal, resolution="0.5K"),
-            store_result=storage.put,
-            sign=storage.sign,
-        ),
+        preview_fn=preview,
+        # Task 29: same instance as preview_fn, so both share put_source_for_fal —
+        # never a second uploader that could drift from the one above.
+        store_sources_fn=preview.store_only,
         webhook_secret=os.environ["STRIPE_WEBHOOK_SECRET"],
         tasks_token=tasks,
         verify_turnstile=lambda token, ip: verify_turnstile(turnstile, token, ip),

@@ -2596,3 +2596,1033 @@ which this task's absolute rule forbids reading even to check a boolean. Left as
 explicit action item for Kevin in `docs/GO-LIVE-KEVIN.md`, with the exact dashboard
 path. No purchase was made and nothing was refunded in this task; that is Kevin's
 step, walked in the new document, not run here.
+
+## 2026-09-21 (Claude Code) — the night's close: live payments, and one defect the walk caught
+
+All fourteen queued tasks are green; `work/queue/` is empty. Every one moved to
+`work/done/` only after the orchestrator ran that file's own check command and saw
+exit 0. All twelve production checks are green, where seven were red at the start.
+
+**The closing walk found a shipped defect the checks could not see.** Task 12's upload
+thumbnails use `URL.createObjectURL`, which makes a `blob:` URL, and `img-src` named
+`'self'` and `data:` but never `blob:`. The browser refused all four, so a visitor
+picked four photos and saw four empty squares. `scripts/check.py upload_thumbnails`
+was green through the whole thing because it only greps the bundle for the
+`data-sf-thumbs` marker — a marker in the bundle is not a picture on the screen.
+This is I1 a second time: the browser refusing an image because the policy did not
+name its scheme. Fixed in 86513fe with a two-sided test, and the walk is now
+6 passed, 2 skipped. Lesson for the next checker: a check that greps the bundle
+proves the code shipped, never that the visitor can see it.
+
+Two weak checks worth knowing about: `stripe_live` was already green BEFORE the live
+switch, because the live key was the newest secret version while the price was still
+a test price — so its green did not prove the switch. The switch was verified instead
+by reading the new live Stripe ids out of the Terraform state and the apply log.
+
+That deploy also failed once for an entirely external reason: HashiCorp's provider
+registry answered 500 while installing `integrations/github`, so `terraform init`
+failed and `deploy` was skipped. Re-running the failed job was the whole fix.
+
+fal spend during the closing verification: balance went 5.8856 -> 5.5256, so $0.36,
+about three preview images — the retry test spends one per run that reaches submit.
+
+## 2026-09-21 (Claude Code) — task 20: who is the visitor
+
+The per-visitor preview cap (3/hour) and the `/api/recuperar` cap key on
+`visitor_address`'s trust in the LAST entry of `X-Forwarded-For`, on an
+inference from task 14 (Google Front End appends its own observed address
+there) that nobody had measured against a real request. If it were wrong -
+if the last entry were the same for every visitor - the whole site would cap
+out at 3 previews an hour under ad traffic. This was the most important
+finding of the night: ads must not start until this is either confirmed or
+fixed.
+
+**Measured, not re-inferred.** The app never logged the raw header, so
+Cloud Run's own request log (`httpRequest.remoteIp`, unforgeable) could not
+be compared against it. Added `xff_shape(x_forwarded_for)` in `app/main.py`,
+called from `visitor_address` on every request: logs entry count and the
+first two octets of the first and last entry (never a full address).
+Test first: `xff_shape` did not exist -> NameError collecting the module;
+4 new cases after (multi-entry, single-entry, non-IPv4 entry, empty header),
+`13 passed` in `tests/test_visitor_address.py`.
+
+`.venv\Scripts\python.exe scripts\ci.py` green (`798 passed, 15 skipped`,
+ruff clean, `DESIGN AUDIT: 0 P0, 0 P1, 0 P2`, `CI MIRROR GATE: green in 50s`).
+Merged `task/20-who-is-the-visitor` to main fast-forward, pushed with
+`git push origin main`. GitHub Actions run `35581370804` green on every job,
+`gh run watch 35581370804 --exit-status` exit 0. Deployed revision
+`studioface-api-00139-tb8`, serving 100% of traffic.
+
+**Made two harmless requests against production myself** right after the
+deploy and read both log streams back, matched by the exact trace id each
+response returned (not a timestamp guess): one `POST /api/recuperar` with a
+hand-crafted `X-Forwarded-For` carrying two fake, prepended entries (email
+did not exist in the store, so no email sent, response `{"sent":true}`); one
+`POST /api/preview` with an invalid Turnstile token and no custom header
+(rejected 403 before any file read or fal call). For the spoofed request,
+the app received THREE entries (GFE appended one on top of my two fake
+ones), and the LAST entry's first two octets matched Cloud Run's own
+`httpRequest.remoteIp` for that same request exactly. Full evidence, pasted,
+in `docs/audit/visitor-address-2026-09-21.md`.
+
+**RESULT: last entry is the visitor's real, GFE-appended address** - it
+matches Cloud Run's own remoteIp for the same request, even with two fake
+entries prepended. `visitor_address`'s selection logic (unchanged since task
+14) is correct; no code change was needed there, only the new observability
+line that made the measurement possible. Confidence: direct, trace-correlated
+evidence against live production traffic through the real path every visitor
+uses agrees on both independent log streams. Not verified: whether GFE ever
+appends more than one entry or zero under a request shape not tried, and
+whether this holds identically on every instance/region the service could
+scale to - both noted in the audit doc rather than hidden.
+
+## 2026-09-21 (Claude Code) — task 21: price-mode-visible
+
+Closed the gap HANDOFF already named at the end of the 20 September closing walk:
+`stripe_live` read only `stripe_mode`, which is derived from the Stripe key's PREFIX
+(app.config.stripe_mode) — so it was already green BEFORE the live switch, while the
+live key was paired with a still-test price, exactly the state in which checkout is
+broken. The key's prefix cannot see the price; only Stripe can.
+
+**What changed.** `app/entry.py`'s new `_price_is_live(s)` retrieves the configured
+Stripe Price once, at startup, inside `build()` — a read-only GET, no cost, no email.
+An explicit timeout (`stripe.default_http_client = stripe.RequestsClient(timeout=5)`)
+bounds the one blocking network call composition makes at startup, and everything that
+can fail (missing config, a bad price id, a network timeout, a stripe-python surface
+this repository's test doubles do not implement) is inside one `try` that answers
+False and logs `type(exc).__name__`, never the key and never the exception's own text.
+`/health` now answers `stripe_price_live` (bool) alongside the existing `stripe_mode`.
+`scripts/check.py`'s `stripe_live` guard now refuses unless BOTH `stripe_mode == live`
+AND `stripe_price_live is True`.
+
+Stripe fact verified via Context7 before writing the timeout line, and by reading the
+installed package's own source when Context7's docs did not name a per-call timeout
+kwarg: `docs/verified.md`, 2026-09-21, task 21 entry.
+
+**Test first, both twins, plus the failure case (tests/test_entry_builds.py).**
+- `entry._price_is_live` had no cases at all before this task; all listed below are new.
+- empty: no `STRIPE_PRICE_EUR` configured -> False, Stripe never called (asserted with
+  a double that raises `AssertionError` if `Price.retrieve` is reached).
+- twin one: Stripe answers `livemode=True` -> `True`.
+- twin two: Stripe answers `livemode=False` -> `False`.
+- failure: `Price.retrieve` raises -> `False`, no exception escapes, and the configured
+  `STRIPE_SECRET_KEY` value never appears in any log record captured at WARNING.
+- composition-root wiring (CLAUDE.md lesson 8): `build()`'s real `Deps.stripe_price_live`
+  reads out the fixture's fake Stripe answer, not the field's own default.
+
+`tests/test_health.py` and `scripts/check.py`'s own new `tests/test_stripe_live_check.py`
+carry the corresponding twins at the HTTP/guard layer: `/health` reports `True`/`False`
+correctly (twins), and `stripe_live()` gets through only when both conditions hold and
+is refused in each of the other three combinations — including the exact combination
+(`stripe_mode=live`, `stripe_price_live=false`) that the OLD check reported green.
+
+    before: AttributeError: module 'app.entry' has no attribute '_price_is_live'
+            (5 new cases in tests/test_entry_builds.py)
+            AssertionError: a live key with a non-live price must be refused
+            (tests/test_stripe_live_check.py, against the unmodified stripe_live())
+    after:  809 passed, 15 skipped (up from 798 before this task, +11)
+
+`.venv\Scripts\python.exe scripts\ci.py` — green, `809 passed, 15 skipped`, ruff clean,
+`DESIGN AUDIT: 0 P0, 0 P1, 0 P2`, `CI MIRROR GATE: green in 47s`.
+
+**One trap found while writing it.** The first version of `_price_is_live` set
+`stripe.default_http_client = stripe.RequestsClient(...)` OUTSIDE the `try`. A held-out
+test file elsewhere (`tests/test_outfit_audit.py`), which builds `entry.build()` through
+its own minimal Stripe double for an unrelated purpose (checking fal request shapes),
+has no `RequestsClient` attribute on that double — so the composition root raised
+`AttributeError` before ever reaching the retrieval's own `try`, red on `scripts/ci.py`.
+Moved the client setup INSIDE the same `try` as the retrieve call: a test double or a
+future stripe-python release missing `RequestsClient` must land on the same safe False
+as a network failure, never escape and take the container down with it.
+
+**Deploy evidence appended immediately below this entry once the push has been watched
+to green**, per this task's own instruction — see the next dated entry.
+
+**Not touched, out of scope for this task.** `app/main.py` (792 lines) and
+`app/entry.py` (now 387 lines) both already exceed CLAUDE.md's 300-line file guideline
+before and after this change; splitting either is a separate task, not requested here,
+and this task added 2 lines to `main.py` and one ~35-line function to `entry.py`, not a
+new violation in kind.
+
+## 2026-09-21 (Claude Code) — task 22: thumbnails-really-render
+
+`scripts/check.py upload_thumbnails` stayed green through the whole 86513fe defect
+because it only searched the downloaded code for the `data-sf-thumbs` marker — a marker
+in the bundle is not a picture on the screen. This task adds the check that looks at the
+screen: `check_upload_thumbnails` in `scripts/verify_production.py` opens a real
+browser, chooses the fixture photo (`tests/fixtures/faces/face.jpg`) through the real
+`#sf-files` file input, waits for the `[data-sf-thumbs] img` element to finish loading,
+reads `naturalWidth` off it (a blocked image reports 0, loaded or not), and reads back
+whether the page's own Content-Security-Policy fired any `securitypolicyviolation`
+event while doing it — so a future scheme this check does not know to name by number is
+still caught by name. It stops there: it never touches the submit button, so it costs
+nothing and sends nothing, unlike `check_preview` next to it. Wired into `main()` to run
+after the shared-browser checks and before `check_preview`, the one link that costs
+money, gated the same way (`--no-browser`).
+
+**Proved red once, without touching production.** `frontend/out` (the real export) was
+served locally through a Python `http.server` subclass that sends a
+`Content-Security-Policy` header built from the real `app.main.CSP` dict, once with
+`blob:` stripped out of `img-src` only — reproducing production's exact pre-86513fe
+policy, every other host unchanged — and once with the real header. Pointed at the
+stripped build:
+
+    status=FAIL
+    evidence=1 securitypolicyviolation event(s): ['img-src blob']
+
+Pointed at the real build:
+
+    status=ok
+    evidence=thumbnail naturalWidth=400, 0 securitypolicyviolation events
+
+Same helper, same fixture photo, only the served policy changed. blob: was never removed
+from production to produce this.
+
+**Test first (`tests/test_verify_thumbnails.py`).** `check_upload_thumbnails` did not
+exist before this task:
+
+    before: ImportError: cannot import name 'check_upload_thumbnails' from
+            'scripts.verify_production'
+    after:  4 passed (test_verify_thumbnails.py) —
+            red case (policy missing blob: -> FAIL),
+            green case (real policy -> OK),
+            failure case (missing fixture file -> FAIL, names the path),
+            BLOCKED case (playwright not importable -> BLOCKED, never crashes the run)
+
+    .venv\Scripts\python.exe -m pytest tests/test_verify_thumbnails.py -q
+    4 passed in 7.33s
+
+`.venv\Scripts\python.exe scripts\ci.py` — green, `813 passed, 15 skipped` (up from 809
+before this task, +4), ruff clean, `DESIGN AUDIT: 0 P0, 0 P1, 0 P2`,
+`CI MIRROR GATE: green in 53s`.
+
+**Not changed.** `scripts/check.py`'s `upload_thumbnails` (the marker grep) was left as
+is — not asked for in this task, and the new outside-in check is the fix for what it
+missed, not a replacement for it. No colours, fonts, first-screen layout, consent
+script, GA4 id, delivery prompts, payment provider, hosting, price, or Google Cloud
+permission changed. No new dependency.
+
+**Deploy evidence.** Merged `task/22-thumbnails-really-render` to main fast-forward,
+pushed with `git push origin main` (commit `d076387`). GitHub Actions run `35586068038`
+green on every job (`emulator`, `ci`, `design`, `infra`, `deploy`),
+`gh run watch 35586068038 --exit-status` exit 0. Deployed revision
+`studioface-api-00143-2pd`, serving 100% of traffic.
+
+Ran `check_upload_thumbnails` against real production immediately after (`GET /`, choose
+`tests/fixtures/faces/face.jpg`, wait for the thumbnail — no submit, no cost, no email):
+
+    status=ok
+    evidence=thumbnail naturalWidth=400, 0 securitypolicyviolation events
+
+`/health` unchanged: `{"ok":true,"killswitch":false,"stripe_mode":"live","stripe_price_live":true}`.
+
+**Not verified.** Whether a visitor selecting more than one photo at once (the multi-file
+case `upload-form.tsx` supports) behaves identically — this check exercises exactly one
+fixture photo, per the task's own instruction.
+
+## 2026-09-21 (Claude Code) — task 24: ad-assets, and the claim the ad pages don't back up
+
+`docs/ads/rsa.json` replaced byte for byte with the brief's two-group version (`cv`,
+`linkedin`, matching the two landing pages task 23 built). No headline, description or
+path segment is over Google's limit — checked by hand before writing anything
+(`scripts/check_ad_copy.py docs/ads/rsa.json` -> `OK: all assets within limits`), so
+there was nothing to report as a refused finding on that front.
+
+`scripts/check_ad_copy.py` now validates every group independently (duplicates are
+checked INSIDE a group only — the two groups intentionally reuse several identical
+headlines, e.g. "Prueba gratis, sin registro", which is not a violation).
+`tests/test_check_ad_copy.py` is new: 14 cases, including the required twins — a
+31-character headline is refused, a 30-character one (the limit itself) gets through —
+plus a case proving a violation in one group does not hide a violation in the other.
+Wired into `scripts/ci.py` as its own step (`ad copy limits`), unconditional, since it
+always has something to check and always passes today.
+
+**The claims test found a real, pre-existing gap and this task did not fix it.**
+`scripts/check_ad_claims.py` (new) extracts every price/range/duration claim from a
+group's headlines and descriptions (19,99; 1 a 4; 7 días; dos minutos; bare numbers
+like 4) and checks each is a substring of the VISIBLE rendered text of that group's
+`final_url` page in `frontend/out` — script/style tag bodies stripped first, so a build
+hash cannot masquerade as a match. `tests/test_check_ad_claims.py` is test-first: 13
+hermetic cases against a staged fixture export (not the live, real-payments pages),
+including the twin the brief asked for — a page saying "29,99" instead of "19,99" is
+refused.
+
+Run for real (`scripts/check_ad_claims.py docs/ads/rsa.json frontend/out`):
+
+    cv: claim '7 días' not found on frontend\out\foto-cv\index.html
+    linkedin: claim '7 días' not found on frontend\out\foto-linkedin\index.html
+    FAIL
+
+Both ad groups' descriptions say "Tus fotos se borran a los 7 días" — true of the
+product (stated on the home page FAQ, in the delivery email, in
+`/legal/privacidad/`) — but task 23's ad-landing pages deliberately show only 3 of the
+5 shared FAQ questions (`frontend/src/content/ad-pages.ts`, `SHARED_FAQ`), and the
+retention question is not one of the three. Not touched here: it is live copy on a
+page taking real payments, this task was not asked to edit `frontend/src`, and the fix
+is a product decision (add the question back, or drop the "7 días" line from the ad),
+not a technical one. `docs/ads/CAMPAIGN.md` records it as an open item for Kevin.
+`tests/test_check_ad_claims.py::test_the_real_ad_groups_claims_do_land_on_their_pages`
+is marked `xfail(strict=False)` with the reason inline, so the gap stays visible in
+every `pytest` run without turning `scripts/ci.py` red — same handling this project
+already used once for `scripts/design_audit.py` (17 Sep entry above: not wired in
+until the page it audits actually passes).
+
+`docs/ads/CAMPAIGN.md` (new): settled items (Search only, Spain, Spanish, exact match,
+the two groups, the campaign-level negative list, 50 EUR total cap, `cv` group first)
+and the stop rule (after 50 EUR: stop if fewer than 1 in 10 clicks starts a preview, or
+there are no sales); open items for Kevin (bidding strategy, daily budget, the
+retention-disclosure gap above).
+
+`tests/test_source_scanners.py`'s `test_tests_that_scan_product_source_strip_comments_
+first` flagged both new test files on the first `scripts/ci.py` run (they read
+`docs/ads/rsa.json` and build paths containing the word "scripts"); added to that
+test's `exempt` set with the same justification pattern as `test_ad_landing_pages.py`
+next to it — JSON data and built HTML have no comments to strip.
+
+No campaign, no ad group and no Google Ads tag was created — every script here only
+reads and writes files. No purchase was made.
+
+**Evidence.**
+
+    .venv\Scripts\python.exe -m pytest tests/test_check_ad_copy.py -v
+      before: 8 failed, 6 passed (old flat-schema check_ad_copy.py against the new tests)
+      after:  14 passed
+
+    .venv\Scripts\python.exe -m pytest tests/test_check_ad_claims.py -v
+      before: 1 error (ModuleNotFoundError: check_ad_claims)
+      after:  13 passed, 1 xfailed
+
+    .venv\Scripts\python.exe scripts\check_ad_copy.py docs\ads\rsa.json
+      OK: all assets within limits   (exit 0)
+
+    .venv\Scripts\python.exe scripts\ci.py
+      875 passed, 15 skipped, 1 xfailed
+      WORKFLOW LINT: ok
+      DESIGN AUDIT: 0 P0, 0 P1, 0 P2   PASS
+      OK: all assets within limits
+      CI MIRROR GATE: green in 54s
+
+**Not changed.** No colours, fonts, first-screen layout, consent script, GA4 id, the
+four delivery prompts, payment provider, hosting, price, or Google Cloud permission.
+No new dependency. `frontend/src` untouched.
+
+## 2026-09-21 (Claude Code) — task 25: letter-gap, diagnosed before touched
+
+Kevin reported a visible gap after "f" in the header's "Recuperar mis fotos" link
+("Recuperar mis f otos"), seen again on 21 September at 2x zoom on production.
+Diagnosed first: four screenshots of the real built export at 300% zoom (Chromium's
+CSS `zoom`, the same effective-zoom path as native page zoom) — current settings,
+`font-kerning: none`, `font-feature-settings: 'liga' 0`, and the system font in place
+of Public Sans. Only the system-font swap removed the gap; kerning and ligatures made
+no difference at all. Swapping the typeface family is exactly what this task's own
+hard constraint forbids, and on its own it does not explain WHY Public Sans does this.
+
+Two more probes (not part of the required four, run before touching anything) found
+the actual mechanism: forcing one fixed, non-interpolated variable-font weight
+instance left the gap unchanged (rules out the next/font subset or loader), but
+`text-decoration-skip-ink: none` alone — a browser decoration setting, Public Sans
+completely untouched — made the underline run solid. The gap is Chromium's own
+`text-decoration-skip-ink: auto` hiding more of the underline than the "f" glyph's ink
+actually occupies, not a font, kerning, ligature or subset problem.
+
+**Fixed:** `text-decoration-skip-ink: none` added to the two header nav links
+(`frontend/src/components/site-header.tsx`) — the only underlined instance; the
+footer's "Recuperar mis fotos" uses a bottom border, not a text underline, so it was
+never at risk and is untouched. No letter-spacing added anywhere. Public Sans, its
+next/font configuration, colours, first-screen layout, consent script, GA4 id, the
+four delivery prompts, payment provider, hosting, price and Google Cloud permissions
+are all unchanged. `docs/audit/letter-gap-2026-09-21.md` holds the four required
+crops, the two extra probes, and the RESULT line, plus a seventh screenshot
+confirming the fix against a fresh `npm run build` with no manual override.
+
+    .venv\Scripts\python.exe scripts\ci.py
+      875 passed, 15 skipped, 1 xfailed
+      DESIGN AUDIT: 0 P0, 0 P1, 0 P2   PASS
+      CI MIRROR GATE: green in 71s
+
+    .venv\Scripts\python.exe -c "import sys,pathlib; sys.exit(0 if 'RESULT:' in
+    pathlib.Path('docs/audit/letter-gap-2026-09-21.md').read_text(encoding='utf-8')
+    else 1)"
+      exit 0
+
+## 2026-09-21 (Claude Code) — task 27: add-more-photos, the bug behind Kevin's first sale
+
+**The bug, in Kevin's own browser, 21 Sep.** He bought once, and while choosing photos
+he picked a second time. `upload-form.tsx`'s file-input handler called `setFiles(kept)`
+with only the new selection — the first pick's photos were thrown away — and the very
+next line, `setHandle(null)`, threw away the preview and the buy button with it. A
+reviewer hit the same thing a few minutes later from the other side: uploaded one empty
+file (refused) and one good photo, got "has usado tus pruebas gratis", and then saw NO
+buy button at all for an hour, because the page had nothing left to sell with. The owner
+could not buy from his own shop.
+
+**Fixed: picking again now ADDS.** The onChange handler (`frontend/src/components/
+upload-form.tsx`) keeps every already-kept file, skips an exact duplicate (same name,
+size and `lastModified` — `fileKey`), adds up to `MAX_FILES`, and clears the input's own
+value afterward so the same path can be picked again once removed. Each thumbnail got
+its own remove button (`Quitar foto N`, a real `<button>` inside the dropzone's
+`<label>` with `preventDefault`+`stopPropagation` so it can never also reopen the file
+picker, `h-11 w-11` = 44px). The dropzone headline reads "Añadir más fotos" below the
+cap. **`setHandle(null)` is gone from the pick handler** — that line was the second half
+of the bug. A pick while a handle exists now shows one line, 'Has cambiado las fotos.
+Puedes generar una prueba nueva o comprar con las fotos actuales.', next to an outline
+button that clears the handle on request; the preview and buy button themselves stay on
+screen untouched.
+
+**Left for task 29, on purpose, not half-built.** The buy button must sell the photos
+the visitor is currently looking at. When the kept set still matches what the current
+handle was made from, checkout is unchanged. When it does not — a pick or a removal
+happened after the preview — `checkout()` calls `storeCurrentPhotosForBuy(files)`
+first. That function does not work: it throws, with a comment naming task 29
+(`work/queue/29-never-block-a-buyer.md`), because storing a changed set of photos
+without paying for a new generation is exactly the storage-only path that task creates
+and it does not exist yet. Today, hitting that case shows an honest Spanish error
+("Todavía no podemos comprar fotos distintas a las de tu prueba...") instead of
+silently buying the wrong photos or inventing a fake version of task 29's server
+change. This is the one piece of the task not fully deliverable yet, named as such
+rather than faked.
+
+**scripts/run_upload_edges.py** boots the real FastAPI app (`app.main.make_app`) with
+Cloudflare's documented dummy Turnstile keys, no Stripe key, no fal key and no Google
+Secret Manager call — none of the three is ever read, because two independent layers
+stop the image model from being reachable: every `/api/preview` request the browser
+test drives is answered by Playwright route interception before it leaves the page,
+and the server's own `preview_fn` is `NeverCallTheModel`, which raises instead of
+calling anything if a test ever forgot to intercept. It runs the server and
+`tests/e2e/test_upload_edges.py` as one command and exits 0 or 1, unlike
+`scripts/run_funnel.py`'s two-shell form, because this walk needs no human watching a
+real generation.
+
+**Failing then passing, tests/e2e/test_upload_edges.py (6 cases: second pick adds,
+duplicate skipped, remove works, same file re-pickable, preview survives a new pick
+with the notice, plus one unrequested edge — the four-photo cap still holds after the
+add/dedupe rewrite):**
+
+Genuinely proved red first, not inferred: `git stash push -- frontend/src/components/
+upload-form.tsx` put the real pre-fix component back (setFiles(kept) replacing,
+setHandle(null) still in the pick handler), rebuilt, and ran the new test file against
+it before writing a single line of the fix:
+
+    .venv\Scripts\python.exe scripts\run_upload_edges.py   (against the OLD component)
+      test_second_pick_adds FAILED
+      test_duplicate_is_skipped PASSED   (a single re-pick of one file happens to keep
+                                           the same count under both the old and new
+                                           handler — the one case that cannot tell them
+                                           apart, and the only one that passed)
+      test_remove_button_works FAILED        (Quitar foto 1 never rendered — no remove
+                                               button existed yet)
+      test_same_file_is_repickable_after_removal FAILED
+      test_preview_survives_a_new_pick FAILED   (the preview image was gone after the
+                                                  second pick — the exact bug)
+      test_the_four_photo_cap_still_holds FAILED   (2 photos, not 4 — the second pick
+                                                     replaced the first instead of adding)
+      5 failed, 1 passed in 57.11s
+    process exit code: 1
+
+Then `git stash pop` restored the fix, rebuilt, and ran the same file again:
+
+    .venv\Scripts\python.exe scripts\run_upload_edges.py
+      test_second_pick_adds PASSED
+      test_duplicate_is_skipped PASSED
+      test_remove_button_works PASSED
+      test_same_file_is_repickable_after_removal PASSED
+      test_preview_survives_a_new_pick PASSED
+      test_the_four_photo_cap_still_holds PASSED
+      6 passed in 12.25s
+    process exit code: 0
+
+**A pre-existing test encoded the OLD replace semantics and had to change with the
+behaviour it was testing**, not left broken: `tests/test_upload_thumbnails.py::
+test_every_object_url_is_created_once_per_file_and_revoked_on_the_next_change` picked
+two files, then re-picked one of THEM, and expected both original blob URLs revoked —
+true only when a second pick replaces. Renamed to
+`..._revoked_on_removal` and rewritten to click the new `Quitar foto 1` button instead,
+which is now the only user action that takes a kept photo out of the set. Still proves
+the same thing the original test proved (every URL created is actually revoked, not
+just followed by an unreached `revokeObjectURL` call) against the real action that now
+causes it.
+
+    .venv\Scripts\python.exe scripts\ci.py
+      875 passed, 21 skipped, 1 xfailed
+      DESIGN AUDIT: 0 P0, 0 P1, 0 P2   PASS
+      CI MIRROR GATE: green in 87s
+
+**Not changed.** Colours, fonts, the home page's first-screen layout, the consent
+script, the GA4 id, the four delivery prompts, payment provider, hosting, price, and
+Google Cloud permissions are all untouched. No new dependency — `fileKey`,
+`sameFileSet` and the remove button use only what React and the File API already give.
+No Google Ads tag, no campaign. No image was generated and no money was spent by
+anything in this task: `run_upload_edges.py` never reads a fal or Stripe credential,
+and the two layers above stop it from ever reaching fal even by accident.
+
+**Not verified.** Whether task 28's future Turnstile-gating change on the "Ver una
+prueba gratis" button interacts with the new add/remove flow — task 28 does not exist
+yet, and this task did not touch Turnstile gating.
+
+## 2026-09-21 (Claude Code) — task 28: count-only-real-tries
+
+**The bug, measured in Kevin's own browser, 21 Sep.** A reviewer uploaded one empty
+file. The server refused it (422, `unsupported_type`) — correctly — but
+`/api/preview` counted the try BEFORE it validated the upload: `d.limiter.check(...)`
+ran first, `validate_uploads(...)` second. The reviewer's next upload, a real photo,
+answered "has usado tus pruebas gratis" (`client_cap`), one try short, for a file that
+never reached the image model.
+
+**Fixed order (`app/main.py`, `_register_preview`), unchanged first step:** human
+check (`verify_turnstile`) still runs first, exactly as before. Then
+`validate_uploads` runs BEFORE `d.limiter.check` — the reorder that is the whole first
+half of this task. Only a file the server accepts can now cost a try.
+
+**The harder half: what "count" means when the model itself can still say no.**
+`RateLimiter.check` is unchanged in shape — the same atomic Firestore
+check-and-increment (`Counter.increment_if_below`) it always was, called once per
+preview, before `preview_fn` runs. If `preview_fn` then raises `ModelRefused` or
+`ValueError` (fal refused the content, or the file was corrupt), `/api/preview` now
+calls a new method, `RateLimiter.refund` (`app/guards.py`), which gives the try back.
+
+**Chosen: count before the model call, refund on failure — not "count only after
+success".** The task allowed either, on the condition that the choice does not reopen
+a race. Counting only after success needs a check ("has this visitor got budget
+left?") that does NOT itself reserve the slot, run before the model call — otherwise
+the model is never called and nothing to count after. That check cannot be the same
+atomic `increment_if_below` call (which both checks AND spends the slot in one
+transaction) without becoming exactly what this task replaces. Two requests from the
+same visitor in flight at once could both read "2 of 3 used", both conclude they have
+room, and both call fal — a real cost neither of them was guaranteed to keep, and a
+visitor's three-per-hour cap that no longer actually caps at three concurrently.
+Counting first keeps the CAP race-free: the transaction that grants the 3rd slot is
+the same transaction that would refuse a 4th, so `test_the_fourth_successful_
+preview_inside_the_hour_is_refused` (below) is not a coincidence, it is what the
+atomic increment always guaranteed. The cost this design accepts, named rather than
+hidden: if the Cloud Run instance dies between `check` granting the try and `refund`
+running — the request never completes at all — that try is not given back. That
+window is narrow (it is the same window in which the visitor also never got an
+answer, so it does not look like "used a try, got nothing" from a working process) and
+is a smaller risk than the alternative's structural race. `RateLimiter.refund` gives
+back all three keys `check` touched (per-client, per-subnet, daily-global), since none
+of that budget was actually spent on a generation.
+
+**Failing then passing, `tests/test_preview_counting.py` (new, 4 cases):** run
+against the OLD code first (`git stash` on `app/guards.py`, `app/main.py`,
+`app/adapters/firestore_counter.py`) to prove genuinely red, not inferred:
+
+    .venv\Scripts\python.exe -m pytest tests/test_preview_counting.py -v   (OLD code)
+      test_an_invalid_file_does_not_reduce_the_remaining_tries FAILED
+        AssertionError: {"detail":"client_cap"} -- assert 429 == 422
+      test_a_model_refusal_does_not_reduce_the_remaining_tries FAILED
+        AssertionError: {"detail":"client_cap"} -- assert 429 == 200
+      test_a_successful_preview_does_reduce_the_remaining_tries PASSED
+      test_the_fourth_successful_preview_inside_the_hour_is_refused PASSED
+      2 failed, 2 passed
+
+The two failures are the bug exactly: an empty file spent the one try `per_client=1`
+allowed, so the real photo that followed got `client_cap` instead of a preview.
+
+Then the stash was popped (the fix restored) and the same file run again:
+
+    .venv\Scripts\python.exe -m pytest tests/test_preview_counting.py -q
+      4 passed in 0.84s
+
+The twin, `test_the_fourth_successful_preview_inside_the_hour_is_refused`, does not
+just assert a 429: it also asserts `model.calls == 3` — the fourth attempt must never
+reach the model at all, proving the cap still caps rather than merely under-counting.
+
+**The browser's own share of the task, `tests/e2e/test_upload_edges.py` (4 new
+cases, added to task 27's six, not replacing them):**
+
+- `test_empty_file_is_refused_with_its_own_message` — an empty file and a good file
+  chosen together: the empty one is dropped before anything is sent, with its own
+  line ("Hemos ignorado 1 archivo vacío."), the good one is kept.
+- `test_oversized_file_is_refused_with_its_own_message` — same shape, a file over
+  12 MB (`MAX_UPLOAD_BYTES` in `upload-form.tsx`, matching `app/guards.py`'s
+  `MAX_BYTES` exactly) gets its own line ("Hemos ignorado 1 foto que supera los
+  12 MB.").
+- `test_submit_stays_disabled_and_says_so_until_the_human_check_has_a_ticket` — the
+  submit button used to disable only while a token was being REFRESHED after a
+  previous attempt; the FIRST wait, before Turnstile had ever delivered a token, did
+  not disable it at all, so a fast click sent an empty token. Now a new `notReady`
+  flag (`challenge !== "ready"`, only when Turnstile is configured) disables the
+  button and swaps its label to "Comprobando que eres una persona" for every
+  not-ready state — waiting, refreshing, or failed. Proven deterministically by
+  blocking `challenges.cloudflare.com` in the browser so the real widget can never
+  resolve, rather than racing it.
+- `test_turnstile_failure_says_it_did_not_pass_not_that_it_expired` — the
+  `turnstile` error sentence changed from "ha caducado" (expired) to "no ha pasado"
+  (did not pass): the server only ever sends this detail when `verify_turnstile`
+  returns false, which is a check that failed, not one that ran out of time.
+
+    .venv\Scripts\python.exe scripts\run_upload_edges.py
+      test_second_pick_adds PASSED
+      test_duplicate_is_skipped PASSED
+      test_remove_button_works PASSED
+      test_same_file_is_repickable_after_removal PASSED
+      test_preview_survives_a_new_pick PASSED
+      test_the_four_photo_cap_still_holds PASSED
+      test_empty_file_is_refused_with_its_own_message PASSED
+      test_oversized_file_is_refused_with_its_own_message PASSED
+      test_submit_stays_disabled_and_says_so_until_the_human_check_has_a_ticket PASSED
+      test_turnstile_failure_says_it_did_not_pass_not_that_it_expired PASSED
+      10 passed in 24.12s
+
+Task 27's six pass unchanged alongside the four new ones — the submit-button gating
+change did not touch the add/remove/duplicate/cap logic those six exercise, and
+`test_preview_survives_a_new_pick` (which does click "Ver una prueba gratis") is the
+proof the new gating does not stop a real Turnstile pass from working.
+
+**`upload-form.tsx` refactor, not just addition.** The old inline pick handler mixed
+type filtering, dedupe and the cap in one `onChange` body with a five-way notice
+ternary. Task 28 needed two more categories (empty, oversized) in that same
+priority chain, so the filtering and the notice text were pulled out into two pure
+functions, `classifyChosenFiles` and `noticeFor`, above the component — each
+independently readable, and the `onChange` body itself is shorter after this task
+than before it, not longer.
+
+    .venv\Scripts\python.exe scripts\ci.py
+      879 passed, 25 skipped, 1 xfailed
+      DESIGN AUDIT: 0 P0, 0 P1, 0 P2   PASS
+      CI MIRROR GATE: green in 100s
+
+**Not changed.** Colours, fonts, the home page's first-screen layout, the consent
+script, the GA4 id, the four delivery prompts, payment provider, hosting, price, and
+Google Cloud permissions are all untouched. No new dependency. `RateLimiter.check_
+named` (used by `/api/recuperar`) is untouched — this task only added `refund`, a
+sibling method, and did not touch the resend-link ceiling.
+
+**Not verified.** Production behaviour under genuinely concurrent requests from the
+same visitor — `tests/test_counter_atomicity.py` already proves `increment_if_below`
+itself never over-grants under contention (24 threads, Firestore emulator, CI-only);
+this task adds no new concurrent-request test of its own for `refund`, because a lost
+refund (the traded-away risk, named above) fails safe — a visitor loses at most one
+try, never gains one.
+
+## 2026-09-21 (Claude Code) — task 29: never-block-a-buyer
+
+**The bug, in Kevin's own words.** 21 September, his own shop refused to sell to him.
+He hit the free-preview limit and from that moment the page showed no buy button at
+all, for an hour, because the buy button only exists while the page holds a signed
+handle, and only a successful preview ever created one. Under advertising, every
+visitor who hits that limit is a paid click thrown away.
+
+**The split, `app/preview.py`.** `Preview.__call__` used to do three things in one
+method: store the uploaded photos, call the image model, sign the result. Pulled the
+first step out into `Preview._store_sources` (private) and a public `Preview.
+store_only`, which stores and nothing else — no `self.model.edit`, ever.
+`Preview.__call__` now calls `_store_sources` too, so there is exactly one place that
+writes a source photo to the bucket, not two that could drift apart.
+
+**The server, `app/main.py` `_register_preview`.** Order unchanged from task 28:
+killswitch, human check, read the files, validate them, count them. What changed is
+what happens when `d.limiter.check` says no. Before, that was an immediate
+`HTTPException(429, why)`. Now it calls a new helper, `_stored_handle`, which:
+
+1. checks a NEW, separate ceiling, `RateLimiter.check_store` (`app/guards.py`) — ten
+   stored batches per visitor per hour, its own key namespace (`store:`), so it can
+   never eat the preview budget or be eaten by it;
+2. if that is also spent, raises the REAL 429, carrying the original reason
+   (`client_cap`/`subnet_cap`/`daily_cap`) — no new Spanish sentence needed, the
+   existing three already cover it;
+3. otherwise calls `d.store_sources_fn` (production: `Preview.store_only`, wired in
+   `app/entry.py` from the SAME `Preview` instance `preview_fn` uses, so both share one
+   `put_source`) and returns 200 with `preview_url: null`, `limited: true`, and a
+   handle signed by the exact same `preview_token(batch, n, secret)` a real preview
+   uses.
+
+Because the signature is the same function called the same way, `/api/checkout` needed
+NO changes at all to accept a stored-only handle — it already only ever checks
+`hmac.compare_digest(preview_token(batch, n, secret), t)`. A made-up handle is refused
+exactly as before.
+
+**The buy button must always sell what the visitor sees, `storeCurrentPhotosForBuy`
+(task 27 left this throwing on purpose).** It now POSTs to `/api/preview` with a new
+form field, `store_only=1`, which the server routes straight to the same
+`_stored_handle` path (skipping `d.limiter.check` entirely — re-backing a purchase
+with a changed set of photos never needs a new generation, the visitor already saw
+one) but still through the SAME `check_store` ceiling, because storage is cheap but
+not free regardless of why it was asked for. `checkout()` in
+`frontend/src/components/upload-form.tsx` calls it with the visitor's live Turnstile
+token and refreshes the token afterward, same as `preview()` does in its own `finally`.
+
+**The page, `frontend/src/components/upload-form.tsx`.** `Handle.preview_url` is now
+`string | null` and `Handle.limited?: boolean`. When `handle.limited` is true, the
+image slot shows the required sentence verbatim (`LIMITED_MESSAGE`) instead of the
+preview `<Image>`, and the clothing selector and buy button below are the SAME ones
+every other handle shows — not a special-cased pair. A handle with `preview_url: null`
+but `limited` false or absent (the `storeCurrentPhotosForBuy` refresh) renders nothing
+in that slot rather than the limited sentence, because that visitor did not hit any
+limit. `preview()` fires the existing `previewFailed` event with `reason: "limit"`
+when a limited answer arrives — never through the `!res.ok` branch, since a limited
+answer is a 200 with a real handle, not a failure the visitor needs to fix.
+
+**Failing then passing, `tests/test_buy_at_limit.py` (new, 7 cases).** Proved genuinely
+red first: `git stash push -- app/main.py app/guards.py app/preview.py app/entry.py`
+put the pre-task server back, then ran the new file against it:
+
+    .venv\Scripts\python.exe -m pytest tests/test_buy_at_limit.py -v   (OLD code)
+      7 failed — TypeError: make_app() got an unexpected keyword argument
+      'store_sources_fn'
+    7 failed in 0.86s
+
+That is the bug exactly: the storage-only path did not exist at all. `git stash pop`
+restored the fix and the same file ran clean:
+
+    .venv\Scripts\python.exe -m pytest tests/test_buy_at_limit.py -q
+    .......
+    7 passed, 2 warnings in 0.88s
+
+The seven: (1) at the limit the answer carries a handle `/api/checkout` accepts, (2)
+no image-model call was made on the storage-only path — proved with a `CountingModel`
+double that records every call it receives, not inferred from the status code, and a
+`RecordingStore` double proving the storage call actually happened, (3) the eleventh
+stored batch in the hour is refused, (4) a visitor who never reaches the preview limit
+never touches the store cap (held-out check — the ceiling must not fire for ordinary
+previews), (5) a made-up handle is still refused by checkout, (6) a genuine limited
+handle with the count tampered with is still refused, (7) the human check still runs
+first even when the visitor is already at the limit.
+
+**Three pre-existing tests encoded the OLD "capped means 429" behaviour and had to
+change with the behaviour they were testing**, same as task 27's precedent with
+`test_upload_thumbnails.py` — not left broken, not deleted, their actual claim
+(the same visitor is still recognised as capped) re-proven against the new shape:
+
+- `tests/test_guards_http.py::test_preview_requires_turnstile_then_rate_limits_
+  then_validates` — the third call at `per_client=2` now asserts `200` with
+  `limited: true` instead of `429`.
+- `tests/test_preview_counting.py::test_a_successful_preview_does_reduce_the_
+  remaining_tries` and `::test_the_fourth_successful_preview_inside_the_hour_is_
+  refused` — same change; the second test's real claim (the model is never called a
+  fourth time, `model.calls == 3`) is untouched and still the point of the test.
+- `tests/test_secure_forwarding.py::test_preview_rate_limit_keys_on_the_trailing_
+  forwarded_for_entry` and `tests/test_visitor_address.py::test_a_visitor_cannot_
+  dodge_the_preview_cap_by_prepending_addresses` — both now assert `200` and
+  `json()["limited"] is True` in place of `429`; `limited: true` can only be true if
+  `RateLimiter.check` keyed the second request the same as the first, so it is still
+  exactly the proof each test is named for.
+
+**The browser's own share, `tests/e2e/test_upload_edges.py` (1 new case, added to
+the ten from tasks 27/28).** `test_the_buy_button_is_visible_and_enabled_at_the_
+free_preview_limit` — `/api/preview` is answered entirely inside the browser via
+Playwright's own route interception (`fake_preview(page, LIMITED_HANDLE)`), the same
+technique every other test in this file already uses to keep the image model out of
+the loop; the loopback server's own `preview_fn` (`NeverCallTheModel`) and new
+`store_sources_fn` (`NeverStoreEither`, added this task) both raise loudly if a test
+ever forgets to intercept. Asserts the required sentence is visible verbatim, no
+preview `<img>` is on the page (nothing promised that was not delivered), the clothing
+selector is visible, and the buy button is both visible and enabled.
+
+    .venv\Scripts\python.exe scripts\run_upload_edges.py
+      test_second_pick_adds PASSED
+      test_duplicate_is_skipped PASSED
+      test_remove_button_works PASSED
+      test_same_file_is_repickable_after_removal PASSED
+      test_preview_survives_a_new_pick PASSED
+      test_the_four_photo_cap_still_holds PASSED
+      test_empty_file_is_refused_with_its_own_message PASSED
+      test_oversized_file_is_refused_with_its_own_message PASSED
+      test_submit_stays_disabled_and_says_so_until_the_human_check_has_a_ticket PASSED
+      test_turnstile_failure_says_it_did_not_pass_not_that_it_expired PASSED
+      test_the_buy_button_is_visible_and_enabled_at_the_free_preview_limit PASSED
+      11 passed in 27.52s
+
+    .venv\Scripts\python.exe scripts\ci.py
+      886 passed, 26 skipped, 1 xfailed
+      DESIGN AUDIT: 0 P0, 0 P1, 0 P2   PASS
+      CI MIRROR GATE: green in 85s
+
+**Composition roots.** `app/entry.py` now builds one `Preview` instance and passes it
+as both `preview_fn=preview` and `store_sources_fn=preview.store_only`, so production
+never has two bucket writers that could drift apart. `tests/e2e/funnel_app.py` (the
+real-fal, real-Stripe-test-mode funnel harness — not part of `scripts/ci.py`, run only
+by hand) wired the same way, for the same reason, though this task did not run that
+harness (it spends real fal money and needs Kevin's Cloudflare/Stripe test secrets in
+the environment). `make_app`'s new `store_sources_fn` parameter defaults to a no-op
+lambda so every other test file that does not exercise the storage-only path keeps
+working unmodified — the same pattern `verify_turnstile`, `verify_pubsub` and friends
+already use in `Deps`.
+
+**Not changed.** Colours, fonts, the home page's first-screen layout, the consent
+script, the GA4 id, the four delivery prompts, payment provider, hosting, price, and
+Google Cloud permissions are all untouched. No new dependency. `RateLimiter.check` and
+`RateLimiter.refund` (task 28) are byte-for-byte untouched; task 29 only adds a sibling
+method, `check_store`.
+
+**Not verified.** The real-fal `tests/e2e/funnel_app.py` harness was wired for
+correctness (same pattern as `app/entry.py`) but not run — it needs Kevin's own
+Cloudflare Turnstile and Stripe test-mode secrets in the environment and spends real
+fal money per run, and nothing in this task's required checks calls for it.
+Production behaviour of the new `store:` counter under genuinely concurrent requests
+from the same visitor was not given its own new test — `tests/test_counter_
+atomicity.py` already proves the underlying `increment_if_below` primitive is atomic
+under contention, and `check_store` is built on that same primitive with no new
+non-atomic step.
+
+## 2026-09-21 (Claude Code) — task 30: preview-survives
+
+**PRINT FIRST, before anything changed.** `app/entry.py`'s `_checkout_factory`:
+
+    cancel_url=f"{s.public_url}/?cancelado=1"
+
+Stripe's own cancel button lands on the plain home page with one query parameter.
+`grep -rn cancelado frontend/src` found zero matches — nothing reads it. Since
+`frontend/src/components/upload-form.tsx` kept the signed preview handle only in
+React state (`useState<Handle | null>(null)`), that landing is a full page load like
+any other: the component remounts from nothing, and the preview and the buy button
+task 27 and 29 fought to keep on screen are gone, costing the visitor another of
+their three tries an hour. A plain reload does the exact same thing for the exact
+same reason — same root cause, same fix, proved together below.
+
+**The signed picture address is the other half of why this needed a new endpoint,
+not just `sessionStorage`.** `GALLERY_TTL` (`app/adapters/gcs.py`) is 15 minutes; a
+handle surviving a reload an hour later still needs to show a picture, and the old
+signed URL is dead by then. So the handle kept is never `preview_url` itself — only
+`batch`, `n`, `t` and `wardrobe`, exactly what the task named, nothing that
+identifies anyone — and a fresh address is asked for on load.
+
+**The server, `app/main.py`.** A new route, `GET /api/preview/{batch}`, registered
+by its own `_register_preview_resign` (kept separate from `_register_preview`
+because folding it in pushed that function's cyclomatic complexity from 8 to 11 —
+`ruff`'s `C901` caught it at write time). It checks `batch`/`n`/`t` with the exact
+same `preview_token(batch, n, secret)` comparison `/api/checkout` already uses,
+imported from `app.core` — not a second implementation that could drift from the
+first — then asks a new `Deps.resign_preview: Callable[[str], str | None]` for a
+fresh address, and answers 404 either way it can fail: a made-up signature, or a
+real signature for a batch that never produced a picture (a store-only handle from
+task 29's free-preview-limit path). Never 403 here: this route names no object the
+caller does not already hold a valid handle for, so a wrong guess and an unknown
+batch get the identical answer.
+
+`resign_preview` is wired in `app/entry.py` from a new `app/adapters/gcs.py`
+function, `preview_resigner(client, bucket_name, sign_url)`: it checks
+`bucket.blob(f"previews/{batch}/preview.jpg").exists()` in the OUTPUT bucket
+(`s.bucket_out` — sources live in `s.bucket_src` instead, confirmed by re-reading
+`Preview.__call__`'s `store_result` call) before signing again, so a batch that was
+only ever stored (never generated) gets 404 rather than a URL to nothing. The
+`.exists()` call is logged with latency (`log_call`, same pattern as `source_uploader`
+next to it) — the one outbound call this task added.
+
+**Failing then passing, `tests/test_preview_resign.py` (new, 3 cases).** Before this
+task's routes existed, `-v` showed `TypeError: make_app() got an unexpected keyword
+argument 'resign_preview'` on all three — genuinely red, not a stub. After:
+
+    .venv\Scripts\python.exe -m pytest tests/test_preview_resign.py -q
+    ...
+    3 passed, 2 warnings in 0.67s
+
+The three: (1) a valid handle gets a fresh address, proved against a double that
+records which batch it was asked about — not inferred from a 200; (2) a made-up
+signature gets 404, and so does a real signature for the wrong count (batch and
+count are both bound into the signature, same shape as
+`tests/test_buy_at_limit.py`'s tampered-count case) — and the double is never even
+asked in either case, proving the signature check runs first; (3) a well-formed
+signature for a batch nothing was ever stored for still gets 404 — the case the
+frontend's restore-on-load falls back to for a limited (store-only) handle.
+
+**The page, `frontend/src/components/upload-form.tsx`.** `HANDLE_STORAGE_KEY =
+"sf_preview_handle"` in `sessionStorage`, not `localStorage` — dies with the tab,
+never a reason to ask for consent since it is exactly the storage the visitor's own
+request needs. `readStoredHandle`/`writeStoredHandle` wrap every access in
+try/catch and treat any failure, including a value that doesn't parse or is missing
+a required field, as "nothing stored" — private browsing or blocked site data never
+breaks the page, it only loses the survival. A `useEffect` on `[handle]` keeps the
+stored copy in step, clearing it whenever `handle` becomes `null` (a fresh "generar
+una prueba nueva" click, or `checkout()`'s file-mismatch failure path). A second
+effect, on mount, reads any stored handle, calls the new `resignPreview` helper
+(`GET /api/preview/{batch}?n=…&t=…`) and restores `handle` regardless of whether that
+call succeeds: on 404 or a network error `preview_url` is just `null`, which renders
+identically to the existing non-limited-null case already on this page (task 29) —
+nothing in the image slot, buy button and clothing selector still there. `files` and
+`previewedFiles` both start empty on a fresh mount, so `sameFileSet` still agrees and
+the "has cambiado las fotos" notice does not appear on a plain restore.
+
+Both new effects live after the Turnstile widget-mount effect, not before it:
+`tests/test_turnstile_widget.py`'s `effect_body()` finds "the next `useEffect` after
+`const rendered`" by source position, and placing the new effects earlier made it
+grab the wrong one first — caught by two failing tests in `scripts/ci.py`'s
+`pytest` step, moved down, green again.
+
+**Clearing on paid, `frontend/src/app/g/page.tsx`.** This page is reachable only
+after a Checkout Session paid (`/api/gracias` redirects here solely when Stripe's
+`payment_status` is `FULFILLABLE`) or via a `/recuperar` link for an order already
+paid before, so a mount-time effect there removes the same `sf_preview_handle` key
+— duplicated as a literal with a comment cross-referencing `upload-form.tsx`, not
+shared through a new module for one string two files use.
+
+**Browser cases, `tests/e2e/test_upload_edges.py` (2 new, 13 total).** A new helper,
+`fake_resign`, answers `GET /api/preview/*` inside the browser the same way
+`fake_preview` already answers the `POST`, and returns a live call counter.
+`scripts/run_upload_edges.py`'s loopback server got a third guard double,
+`NeverResignEither`, alongside `NeverCallTheModel` and `NeverStoreEither` — it has no
+real bucket to check, so a forgotten interception must fail loudly, not silently
+answer wrong.
+
+    .venv\Scripts\python.exe scripts\run_upload_edges.py
+      test_second_pick_adds PASSED
+      test_duplicate_is_skipped PASSED
+      test_remove_button_works PASSED
+      test_same_file_is_repickable_after_removal PASSED
+      test_preview_survives_a_new_pick PASSED
+      test_the_four_photo_cap_still_holds PASSED
+      test_empty_file_is_refused_with_its_own_message PASSED
+      test_oversized_file_is_refused_with_its_own_message PASSED
+      test_submit_stays_disabled_and_says_so_until_the_human_check_has_a_ticket PASSED
+      test_turnstile_failure_says_it_did_not_pass_not_that_it_expired PASSED
+      test_the_buy_button_is_visible_and_enabled_at_the_free_preview_limit PASSED
+      test_the_preview_and_buy_button_survive_a_reload PASSED
+      test_the_preview_and_buy_button_survive_returning_from_the_payment_page PASSED
+      13 passed in 35.36s
+
+Each new test proves TWO things with a live counter, not an assumption: the buy
+button and preview are visible after the reload/return, AND the POST `/api/preview`
+generation route was called exactly once throughout (never a second time), while
+the new GET resign route was called exactly once (the restore, and only the
+restore).
+
+    .venv\Scripts\python.exe scripts\ci.py
+      889 passed, 26 skipped, 1 xfailed
+      DESIGN AUDIT: 0 P0, 0 P1, 0 P2   PASS
+      CI MIRROR GATE: green in 106s
+
+**Composition roots.** `app/entry.py` wires `resign_preview=preview_resigner(gcs,
+s.bucket_out, sign_url)` — the same `gcs` client and `sign_url` every other adapter
+in `build()` already shares. `make_app`'s new `resign_preview` parameter defaults to
+`lambda batch: None` (always 404), the same fail-closed convention `verify_pubsub`
+and `retrieve_session` already use, so every other test file that does not exercise
+this route keeps working unmodified.
+
+**Not changed.** Colours, fonts, the home page's first-screen layout, the consent
+script, the GA4 id, the four delivery prompts, payment provider, hosting, price, and
+Google Cloud permissions are all untouched. No new dependency.
+
+**Not verified.** Whether a real Stripe cancel redirect reaches `/?cancelado=1` in
+production was not re-proven against a live Checkout Session — this task never opens
+one (no purchases, ever, per standing instruction) — only that `_checkout_factory`
+sets that `cancel_url` (read, not run) and that the identical full-page-navigation
+mechanics are what a reload already proves. GCS blob existence checks
+(`preview_resigner`'s `.exists()`) were not run against a real bucket — no live GCP
+project in this environment — only unit-tested through the `resign_preview` double
+in `tests/test_preview_resign.py` and the loopback server's `NeverResignEither`
+guard.
+
+## 2026-09-21 — task 31: the refused file stayed forever, and got resent forever
+
+**THE BUG, measured against the local app before touching anything:** task 27 made
+picking photos a second time ADD to the kept photos instead of replacing them, which
+was right and fixed a real problem. It introduced this: when the server refuses a
+file, the refused file stayed in the kept set forever, so every later attempt
+re-sent it and was refused again. The visitor was stuck with no way to get a
+preview. Also broke `tests/e2e/test_funnel.py::test_the_retry_succeeds_without_reloading_the_page`,
+which timed out at three minutes waiting for a preview that could never arrive
+because the bad file from an earlier test in the same file stayed in the batch.
+
+**What the server's refusal details actually are** (`cat -n app/guards.py`,
+`app/main.py`, `app/core.py`, `app/adapters/fal.py`, `app/images.py`, before writing
+any code): `validate_uploads` (guards.py) raises three shapes — `upload_count:<n>`
+where n is a COUNT, not a file index; `file_too_large:<i>` and `unsupported_type:<i>`,
+both indexed to the offending file's position in the batch. Once past validation,
+`preview_fn` can also raise `ModelRefused` (fal's own `type` field — content_policy,
+model_no_media_generated, model_image_load_error, model_image_too_large, ...) or a
+plain `ValueError("undecodable_image")` from `images.normalise_all`. NEITHER of
+those two names an index: fal receives every accepted file as ONE call
+(`image_urls`), so a refusal from fal has no way to blame a single input, and
+`normalise_all`'s docstring says so on purpose — "One bad file fails the whole
+upload, on purpose."
+
+**The fix.** `frontend/src/components/upload-form.tsx`: `refusedFileIndex(detail)`
+parses `unsupported_type:<i>` / `file_too_large:<i>`. `files.slice(0, MAX_FILES)` is
+exactly what `preview()` POSTs, in the same order, and `files` never exceeds
+MAX_FILES, so index i maps straight back onto `files`. On a 422 with a parseable
+index, `preview()` now drops `files[idx]` (the existing `useEffect` that revokes
+blob-URL thumbnails on any `files` change handles the object URL — same path
+`removePhoto` already uses, no new cleanup code needed) and appends which file was
+dropped, in Spanish, to the error sentence. The opening sentence from `messageFor`
+is kept unchanged so `tests/e2e/test_funnel.py`'s own
+`test_a_file_that_is_not_an_image_gets_its_own_sentence` still finds "no es una
+imagen" in it. Refusals with no index (`upload_count`, every fal-side refusal) go
+through exactly as before — nothing removed, because guessing which file was at
+fault would be worse than saying nothing. Left unresolved on purpose: the buy-time
+path (`storeCurrentPhotosForBuy`, used when a changed photo set re-backs a purchase)
+hits the same validate_uploads and could in principle carry the same defect, but
+nothing in this task measured or tested that path, so it was not touched.
+
+**Tests.** `tests/e2e/test_upload_edges.py` (+1): a text file saved under a `.jpg`
+name passes the browser's own `image/*` filter (browsers infer `File.type` from the
+extension) but fails the server's real magic-byte `sniff()`, so this is the one case
+in the file that reaches the loopback server for real and is refused for real — no
+`fake_preview` interception, because the refusal happens inside `validate_uploads`
+before `preview_fn` (`NeverCallTheModel`) is ever called. Failing first:
+
+    EDGES_BASE=http://127.0.0.1:8098 .venv\Scripts\python.exe -m pytest \
+      tests/e2e/test_upload_edges.py::test_server_refusal_drops_only_the_refused_file -v
+      AssertionError: Alguno de los archivos no es una imagen.
+      assert 'not-really-a-photo.jpg' in 'Alguno de los archivos no es una imagen.'
+      1 failed in 5.51s
+
+Passing after the fix, and every pre-existing case in the file still green, including
+the two task-28 client-side-only cases (empty file, oversized file — filtered before
+ever leaving the browser, never a server round trip):
+
+    .venv\Scripts\python.exe scripts\run_upload_edges.py
+      14 passed in 38.75s
+
+    .venv\Scripts\python.exe scripts\ci.py
+      889 passed, 29 skipped, 1 xfailed
+      DESIGN AUDIT: 0 P0, 0 P1, 0 P2   PASS
+      CI MIRROR GATE: green in 107s
+
+The shop's own browser test, previously timing out after three minutes on the exact
+case this task fixes, now green and fast:
+
+    .venv\Scripts\python.exe scripts\run_funnel.py --serve-only
+    RUN_FUNNEL=1 .venv\Scripts\python.exe -m pytest tests/e2e/test_funnel.py -q
+      6 passed, 2 skipped in 27.76s
+
+The two skips are the RUN_FUNNEL_PAID-gated purchase cases, left unset per
+instruction. One real fal image was spent, by
+`test_the_retry_succeeds_without_reloading_the_page` (its own docstring says so); no
+purchase was made anywhere in this task.
+
+**Not changed:** colours, fonts, the home page's first-screen layout, the consent
+script, the GA4 id, the four delivery prompts, payment provider, hosting, price,
+Google Cloud permissions. No new dependency.
+
+**Deploy:** pushed to main (`dae2685..f9f1b06`), branch `fix/drop-the-refused-file`
+merged fast-forward and deleted locally. Deploy run 35613683750 green end to end
+(`ci`, `emulator`, `infra`, `deploy`, including the deployed `verify production from
+outside` and `lighthouse` steps). Revision `studioface-api-00153-vcd` serving;
+`GET https://api.studioface.app/health -> 200 {"ok":true,"killswitch":false,
+"stripe_mode":"live","stripe_price_live":true}`.
+
+## 2026-09-21 (Claude Code) — eleven tasks, and the bug the closing check found
+
+All eleven queued tasks are green and work/queue/ is empty. Every one moved to
+work/done/ only after the orchestrator ran that task's own check command and saw it
+exit 0. All twelve outside-in production checks are green, the production monitor
+answers all 19 links (one blocked by the human check, by design), and the shop's own
+automated browser test is 6 passed, 2 skipped.
+
+**The most important measurement of the night** is that the per-visitor preview limit
+really does key on the visitor and not on Google's front door. The check sent two fake
+entries in the forwarded-address header, the app received three, and the last entry
+matched Cloud Run's own record of who connected — correlated by the same trace id
+across two separate log streams. Had it gone the other way, every visitor would have
+shared one limit and the whole site would have been capped at three previews an hour.
+
+**The closing check found a bug the task checks could not see, for the second night
+running.** Making a second pick ADD photos instead of replacing them was right, but it
+meant a file the server refused stayed in the batch forever, so every later attempt
+re-sent it and was refused again — the visitor could never get a preview. Measured on
+the local app: bad file chosen, server answered 422 unsupported_type:0, the refused
+file was still kept, and adding a good photo produced a batch of two including the bad
+one. Fixed in f9f1b06 by dropping the file the server names. The lesson is the same one
+as yesterday's blob: defect: a task's own check passes on the thing the task changed,
+while the bug lives in what that change did to everything around it. Only the
+end-to-end run catches those.
+
+Two things left for Kevin, neither fixed here because neither is ours to decide:
+- The ad copy promises "Tus fotos se borran a los 7 días" but neither landing page says
+  it; the pages show three of the five shared questions and that is not one of them.
+  Either add the question to the pages or drop the line from the ad copy.
+- The HTTP access log prints the FULL order id and the FULL gallery token, which
+  defeats the deliberate shortening in the app's own log lines: anyone who can read the
+  logs can open a customer's gallery.
+
+fal spend tonight, measured from the balance: 5.5256 -> 4.8456, so $0.68.

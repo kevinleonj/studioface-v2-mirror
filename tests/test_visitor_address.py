@@ -29,7 +29,7 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.core import OrderStore, Pipeline  # noqa: E402
 from app.guards import MemoryCounter, RateLimiter  # noqa: E402
-from app.main import make_app, visitor_address  # noqa: E402
+from app.main import make_app, visitor_address, xff_shape  # noqa: E402
 
 
 class _FakeClient:
@@ -96,6 +96,33 @@ def test_no_socket_peer_either_gives_an_empty_string():
     assert visitor_address("", request) == ""
 
 
+# ---------------------------------------------- task 20: measuring the assumption
+
+
+def test_xff_shape_counts_entries_and_never_prints_a_full_address():
+    """Task 20's one INFO line: enough to compare the last entry against Cloud
+    Run's own httpRequest.remoteIp (first two octets each), never a full IP."""
+    shape = xff_shape("198.51.100.9, 203.0.113.7")
+    assert shape == "entries=2 first=198.51 last=203.0 first_eq_last=False"
+    assert "198.51.100.9" not in shape
+    assert "203.0.113.7" not in shape
+
+
+def test_xff_shape_flags_when_the_only_entry_is_both_first_and_last():
+    assert xff_shape("203.0.113.7") == "entries=1 first=203.0 last=203.0 first_eq_last=True"
+
+
+def test_xff_shape_handles_a_non_ipv4_entry_without_raising():
+    """A hostname or v6 literal never has exactly four dot-separated parts, so it is
+    reported as unknown rather than mis-sliced into something that looks like an
+    octet pair."""
+    assert xff_shape("not-an-ip") == "entries=1 first=? last=? first_eq_last=False"
+
+
+def test_xff_shape_of_an_empty_header_has_zero_entries():
+    assert xff_shape("") == "entries=0 first=? last=? first_eq_last=False"
+
+
 # ---------------------------------------------------------------- through the API
 
 
@@ -142,7 +169,11 @@ def test_a_visitor_cannot_dodge_the_preview_cap_by_prepending_addresses():
     first = _preview(client, "1.1.1.1, 203.0.113.7")
     assert first.status_code == 200
     second = _preview(client, "2.2.2.2, 203.0.113.7")
-    assert second.status_code == 429, (
+    # Task 29: being capped no longer means a 429 — /api/preview stores the photos
+    # and signs a handle instead (`limited: true`), which can only be true if
+    # RateLimiter.check keyed this request the same as the first one.
+    assert second.status_code == 200
+    assert second.json()["limited"] is True, (
         "rotating the visitor-controlled leading entry must not lift the cap"
     )
 

@@ -16,11 +16,75 @@ import { clickIds, EVENTS, ga4Identifiers, track } from "@/lib/track";
 
 type Handle = {
   wardrobe?: string;
-  preview_url: string;
+  // Task 29: null when the photos were stored without a generation — either the
+  // free-preview limit was reached (`limited: true`) or the buy button re-backed a
+  // purchase with a changed set of photos (`limited: false`, via
+  // storeCurrentPhotosForBuy). /api/checkout verifies `t` identically either way.
+  preview_url: string | null;
   batch: string;
   n: number;
   t: string;
+  // True only when the free previews for this hour are used up and /api/preview
+  // stored the photos instead of generating one. Absent (falsy) on every other
+  // handle, including a store-only one made for a changed set of photos.
+  limited?: boolean;
 };
+
+/**
+ * Task 30, preview-survives. WHAT WAS MEASURED FIRST, 21 Sep: `handle` above lived
+ * only in this component's React state. app/entry.py's `_checkout_factory` sends a
+ * cancelled Stripe Checkout back to `cancel_url=f"{s.public_url}/?cancelado=1"` — the
+ * plain home page, one inert query parameter nothing in frontend/src ever reads — so
+ * that return, exactly like an ordinary reload, remounts this component from nothing
+ * and takes the preview and the buy button with it. The next attempt then spends
+ * another of the visitor's three tries an hour for nothing.
+ *
+ * Kept here is the storage strictly needed to restore the buy button: the signed
+ * handle (batch, count, signature) and the clothing the preview was made with.
+ * Nothing else — no photo, nothing identifying — which is also why this needs no
+ * separate consent notice: it is storage the visitor's own request requires.
+ * sessionStorage, not localStorage, so it dies with the tab, and every read and
+ * write is wrapped in try/catch: private browsing and blocked site data can make
+ * either one throw, and the page must still work with nothing restored.
+ */
+const HANDLE_STORAGE_KEY = "sf_preview_handle";
+
+type StoredHandle = { batch: string; n: number; t: string; wardrobe?: string };
+
+function readStoredHandle(): StoredHandle | null {
+  try {
+    const raw = sessionStorage.getItem(HANDLE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<StoredHandle>;
+    if (
+      typeof parsed.batch === "string" &&
+      parsed.batch &&
+      typeof parsed.n === "number" &&
+      typeof parsed.t === "string" &&
+      parsed.t
+    ) {
+      return {
+        batch: parsed.batch,
+        n: parsed.n,
+        t: parsed.t,
+        wardrobe: typeof parsed.wardrobe === "string" ? parsed.wardrobe : undefined,
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredHandle(h: StoredHandle | null): void {
+  try {
+    if (h === null) sessionStorage.removeItem(HANDLE_STORAGE_KEY);
+    else sessionStorage.setItem(HANDLE_STORAGE_KEY, JSON.stringify(h));
+  } catch {
+    // Private browsing or blocked site data: the page still works for this visit,
+    // it just will not survive a reload — never a reason to break the current one.
+  }
+}
 
 declare global {
   interface Window {
@@ -44,8 +108,11 @@ const ERRORS: Record<string, string> = {
   subnet_cap: "Demasiadas pruebas desde tu red. Inténtalo más tarde.",
   daily_cap:
     "Hoy se ha alcanzado el límite de pruebas gratuitas. Vuelve mañana.",
+  // Task 28. Was "ha caducado" (expired) — not what happened. The server only ever
+  // says `turnstile` when `verify_turnstile` returned false, which is a check that
+  // did NOT pass (a bad or reused token), not one that ran out of time.
   turnstile:
-    "La comprobación de seguridad ha caducado. Espera un momento y vuelve a intentarlo.",
+    "La comprobación de seguridad no ha pasado. Espera un momento y vuelve a intentarlo.",
   paused:
     "El servicio está pausado temporalmente. Vuelve a intentarlo más tarde.",
   checkout_not_configured: "El pago no está disponible ahora mismo.",
@@ -101,6 +168,12 @@ const WARDROBES = [
   { key: "jersey-cuello-alto", label: "Jersey de cuello alto" },
   { key: "negro-basico", label: "Camiseta negra lisa" },
 ];
+
+// Task 29, never-block-a-buyer. Says exactly what the terms already promise — a
+// stored batch and a chance to buy or come back — and nothing more: no promise of a
+// preview later, no promise of when "within the hour" started for this visitor.
+const LIMITED_MESSAGE =
+  "Has usado tus pruebas gratis de esta hora. Puedes comprar tus cuatro fotos ahora o volver dentro de una hora.";
 
 // F5. Measured from Cloud Run request logs, 30-day window, every successful
 // /api/preview: 9.43, 10.04, 11.20, 11.26, 12.30 seconds. Median 11.20, slowest 12.30.
@@ -182,6 +255,144 @@ function isHeic(file: File): boolean {
   return ext === "HEIC" || ext === "HEIF";
 }
 
+// O14, task 27. A duplicate is "the same file chosen again", not "a file that looks
+// the same" — name, size and last-modified together are what the File API actually
+// gives us, and forging all three at once is not something a second pick does by
+// accident.
+function fileKey(file: File): string {
+  return `${file.name}|${file.size}|${file.lastModified}`;
+}
+
+function sameFileSet(a: File[], b: File[]): boolean {
+  if (a.length !== b.length) return false;
+  const keysB = new Set(b.map(fileKey));
+  return a.every((file) => keysB.has(fileKey(file)));
+}
+
+// Task 28. Mirrors app/guards.py's MAX_BYTES exactly, so a photo too large is
+// refused for the same reason on both sides — the browser refusal just saves the
+// visitor a round trip to hear it.
+const MAX_UPLOAD_BYTES = 12 * 1024 * 1024;
+
+/**
+ * Task 31 (drop-the-refused-file). THE BUG THIS REPLACES: picking photos a second
+ * time now ADDS (task 27), which was right, but a file the SERVER refused used to
+ * stay in the kept set forever — every later attempt re-sent it and was refused
+ * again, and the visitor could never get a preview.
+ *
+ * app/guards.py's validate_uploads names the offending file by its POSITION in the
+ * batch it just received: `unsupported_type:<i>` or `file_too_large:<i>`. `files`
+ * never exceeds MAX_FILES, so `files.slice(0, MAX_FILES)` — what preview() actually
+ * POSTs — is `files` itself, in the same order, and index i maps straight back onto
+ * it. Some refusals never name an index at all: `upload_count:<n>` counts files, not
+ * one of them, and the image-model refusals (content_policy, undecodable_image,
+ * model_*, in ERRORS above) come from ONE fal call over the whole batch, which has
+ * no way to blame a single input. Those keep going through messageFor exactly as
+ * before — nothing is removed, because guessing which file was at fault would be
+ * worse than saying nothing.
+ */
+function refusedFileIndex(detail: string | undefined): number | null {
+  const m = detail ? /^(?:unsupported_type|file_too_large):(\d+)$/.exec(detail) : null;
+  return m ? Number(m[1]) : null;
+}
+
+type ChosenFiles = {
+  toAdd: File[];
+  rejected: number; // not image/*
+  empty: number; // 0 bytes — the reviewer's upload that started this task
+  oversized: number; // over MAX_UPLOAD_BYTES
+  duplicates: number;
+  dropped: number; // would exceed MAX_FILES
+};
+
+/** Pure so it is checkable on its own: what a single pick does to the kept set. */
+function classifyChosenFiles(chosen: File[], existing: File[]): ChosenFiles {
+  const images = chosen.filter((f) => f.type.startsWith("image/"));
+  const rejected = chosen.length - images.length;
+  const empty = images.filter((f) => f.size === 0).length;
+  const oversized = images.filter((f) => f.size > MAX_UPLOAD_BYTES).length;
+  const usable = images.filter((f) => f.size > 0 && f.size <= MAX_UPLOAD_BYTES);
+  const existingKeys = new Set(existing.map(fileKey));
+  const unique: File[] = [];
+  let duplicates = 0;
+  for (const file of usable) {
+    const key = fileKey(file);
+    if (existingKeys.has(key)) {
+      duplicates += 1;
+      continue;
+    }
+    existingKeys.add(key);
+    unique.push(file);
+  }
+  const room = Math.max(0, MAX_FILES - existing.length);
+  const toAdd = unique.slice(0, room);
+  return { toAdd, rejected, empty, oversized, duplicates, dropped: unique.length - toAdd.length };
+}
+
+/** One line at a time, most serious first — matches the single-notice design this
+ * dropzone already had before task 28 added the empty/oversized cases. */
+function noticeFor(c: Omit<ChosenFiles, "toAdd">): string {
+  if (c.rejected > 0)
+    return `Hemos ignorado ${c.rejected} ${c.rejected === 1 ? "archivo que no es una imagen" : "archivos que no son imágenes"}.`;
+  if (c.empty > 0)
+    return `Hemos ignorado ${c.empty} ${c.empty === 1 ? "archivo vacío" : "archivos vacíos"}.`;
+  if (c.oversized > 0)
+    return `Hemos ignorado ${c.oversized} ${c.oversized === 1 ? "foto que supera los 12 MB" : "fotos que superan los 12 MB"}.`;
+  if (c.dropped > 0)
+    return `Solo puedes guardar ${MAX_FILES} fotos. Hemos ignorado ${c.dropped} ${c.dropped === 1 ? "foto" : "fotos"}.`;
+  if (c.duplicates > 0)
+    return `${c.duplicates === 1 ? "Esa foto ya estaba" : "Esas fotos ya estaban"} en tu selección.`;
+  return "";
+}
+
+/**
+ * Task 27. THE BUG THIS REPLACES: picking photos a second time called setFiles(kept)
+ * with only the new selection, which threw away every photo kept from the first pick,
+ * and setHandle(null) right next to it threw away the preview and the buy button with
+ * it — for up to an hour, on Kevin's own first real sale. Picking again must ADD.
+ *
+ * Task 29 is what makes this function real: /api/preview's storage-only path
+ * (`store_only=1`) stores the CURRENT files and signs a handle exactly the way a real
+ * preview does, without calling the image model — the visitor already saw one, so a
+ * second generation is not needed just to buy a changed set of photos. Bounded by the
+ * same RateLimiter.check_store as the free-preview-limit path (app/main.py).
+ */
+async function storeCurrentPhotosForBuy(
+  files: File[],
+  turnstileToken: string,
+): Promise<Handle> {
+  const body = new FormData();
+  body.append("turnstile_token", turnstileToken);
+  body.append("store_only", "1");
+  files.slice(0, MAX_FILES).forEach((file) => body.append("files", file));
+  const res = await fetch("/api/preview", { method: "POST", body });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(String(data.detail ?? res.status));
+  return data as Handle;
+}
+
+/**
+ * Task 30. GET /api/preview/{batch} (app/main.py's `_register_preview_resign`) — the
+ * SAME `preview_token` verification /api/checkout uses, never a re-implementation.
+ * A signed picture address dies in 15 minutes, so restoring the handle after a reload
+ * needs a fresh one for the SAME stored result, never a new generation. Returns null
+ * on any failure (a store-only handle with no picture ever generated, a network
+ * error, or — if sessionStorage were ever tampered with — a made-up signature): the
+ * caller still restores the handle itself so the buy button comes back, and
+ * /api/checkout verifies batch/n/t again independently regardless.
+ */
+async function resignPreview(stored: StoredHandle): Promise<string | null> {
+  try {
+    const url = `/api/preview/${encodeURIComponent(stored.batch)}?n=${stored.n}&t=${encodeURIComponent(stored.t)}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => ({}));
+    return typeof data.preview_url === "string" ? data.preview_url : null;
+  } catch {
+    return null;
+  }
+}
+
 export function UploadForm() {
   const [files, setFiles] = useState<File[]>([]);
   const [wardrobe, setWardrobe] = useState("");
@@ -205,6 +416,10 @@ export function UploadForm() {
   // React runs that same function both when `files` changes and when the component
   // unmounts, so there is a single code path to prove rather than two.
   const [thumbs, setThumbs] = useState<Thumb[]>([]);
+  // O14. The exact files the CURRENT handle was made from, so the page can tell when
+  // a later pick or removal has left the visitor looking at a different set of
+  // photos than the one behind the preview they are looking at.
+  const [previewedFiles, setPreviewedFiles] = useState<File[]>([]);
   // F5. Focus lands here once the preview has decoded.
   const buyButton = useRef<HTMLButtonElement>(null);
   // F1. The widget id from render(), and a poll handle so a refresh in flight can be
@@ -372,6 +587,61 @@ export function UploadForm() {
     [],
   );
 
+  // Task 29. F5 moves focus to the buy button once the preview IMAGE loads; a
+  // limited answer never has one, so this is the same "the wait is over, here is
+  // what to do next" move for that case.
+  useEffect(() => {
+    if (handle?.limited) buyButton.current?.focus();
+  }, [handle]);
+
+  // Task 30, preview-survives. Restores the handle a reload or a return from
+  // Stripe's cancel redirect would otherwise have thrown away (see the module
+  // docstring on HANDLE_STORAGE_KEY above for what was measured before this fix).
+  // Runs once, on mount, before anything the visitor does — `files` and
+  // `previewedFiles` both start empty either way, so `sameFileSet` still agrees they
+  // match and the "you changed your photos" notice does not appear on a plain
+  // restore. `preview_url` is fetched fresh (never trusted from storage: the signed
+  // address dies in 15 minutes) and stays null on any failure, which renders the
+  // same as the existing non-limited null case — nothing in the image slot, buy
+  // button and clothing selector still there.
+  useEffect(() => {
+    const stored = readStoredHandle();
+    if (!stored) return;
+    let cancelled = false;
+    resignPreview(stored).then((preview_url) => {
+      if (cancelled) return;
+      setHandle({
+        batch: stored.batch,
+        n: stored.n,
+        t: stored.t,
+        wardrobe: stored.wardrobe,
+        preview_url,
+      });
+      setPreviewWardrobe(stored.wardrobe ?? "");
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Task 30. Kept in step with `handle` itself: a fresh handle is saved, and a
+  // cleared one (checkout(), or the "generar una prueba nueva" reset below) removes
+  // the stored one too, so a stale handle for a batch this tab has moved on from
+  // never comes back on the next reload.
+  useEffect(() => {
+    if (!handle) {
+      writeStoredHandle(null);
+      return;
+    }
+    writeStoredHandle({
+      batch: handle.batch,
+      n: handle.n,
+      t: handle.t,
+      wardrobe: handle.wardrobe,
+    });
+  }, [handle]);
+
   const preview = useCallback(async () => {
     setBusy(true);
     setError("");
@@ -387,14 +657,36 @@ export function UploadForm() {
       const res = await fetch("/api/preview", { method: "POST", body });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(messageFor(data.detail, "No hemos podido generar la prueba."));
-        track(EVENTS.previewFailed, {
-          reason: String(data.detail ?? res.status),
-        });
+        const detail = data.detail as string | undefined;
+        const idx = refusedFileIndex(detail);
+        const base = messageFor(detail, "No hemos podido generar la prueba.");
+        if (idx !== null && idx < files.length) {
+          // Task 31. THE FIX: the server named this file, so drop exactly that one
+          // and keep the rest — the useEffect above revokes its thumbnail address
+          // the same way it does for removePhoto, because both just change `files`.
+          // `base` is kept as the opening sentence (never replaced) so an existing
+          // reader of that sentence, e.g. tests/e2e/test_funnel.py's
+          // test_a_file_that_is_not_an_image_gets_its_own_sentence, still finds it.
+          const dropped = files[idx];
+          setFiles((prev) => prev.filter((_, i) => i !== idx));
+          setError(
+            `${base} Hemos quitado "${dropped.name}" de tus fotos. Puedes generar ` +
+              "la prueba con las que quedan o añadir otra.",
+          );
+        } else {
+          setError(base);
+        }
+        track(EVENTS.previewFailed, { reason: String(detail ?? res.status) });
         return;
       }
+      // Task 29. A limited answer is still a 200 with a real, usable handle — never
+      // the previewFailed(!res.ok) branch above, which would say a sentence about
+      // photos that were never the problem. It gets its own event all the same, so
+      // the funnel can count how often the free previews run out.
+      if ((data as Handle).limited) track(EVENTS.previewFailed, { reason: "limit" });
       setHandle(data as Handle);
       setPreviewWardrobe((data as Handle).wardrobe ?? "");
+      setPreviewedFiles(files.slice(0, MAX_FILES));
     } catch {
       setError("No hemos podido conectar. Comprueba tu conexión.");
       track(EVENTS.previewFailed, { reason: "network" });
@@ -410,6 +702,30 @@ export function UploadForm() {
     if (!handle) return;
     setBusy(true);
     setError("");
+    // Task 27/29. The buy button must sell what the visitor is currently looking at,
+    // not whatever the last successful preview happened to be made from. If a pick or
+    // a removal since then has changed the kept set, the handle is refreshed FIRST via
+    // the storage-only path — no new generation, the visitor already saw one.
+    let active = handle;
+    if (!sameFileSet(files, previewedFiles)) {
+      try {
+        active = await storeCurrentPhotosForBuy(files, turnstileToken.current);
+      } catch (e) {
+        setBusy(false);
+        setError(
+          messageFor(
+            e instanceof Error ? e.message : undefined,
+            "Todavía no podemos comprar fotos distintas a las de tu prueba. Genera una prueba nueva con las fotos actuales.",
+          ),
+        );
+        return;
+      }
+      setHandle(active);
+      setPreviewedFiles(files.slice(0, MAX_FILES));
+      // The token storeCurrentPhotosForBuy just spent is single-use, same as the one
+      // preview() spends in its own finally block.
+      refreshChallenge();
+    }
     // The last click before Stripe owns the session. Anything after this is measured by
     // the server-side `purchase`, so this is the only place the drop-off can be seen.
     // GA4's own name for this step (docs/verified.md, Gg), with the shape it documents.
@@ -427,9 +743,9 @@ export function UploadForm() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          batch: handle.batch,
-          n: handle.n,
-          t: handle.t,
+          batch: active.batch,
+          n: active.n,
+          t: active.t,
           style: "corporativo",
           wardrobe: wardrobe || null,
           gclid: clickIds.gclid,
@@ -450,7 +766,16 @@ export function UploadForm() {
     } finally {
       setBusy(false);
     }
-  }, [handle, wardrobe]);
+  }, [handle, wardrobe, files, previewedFiles, refreshChallenge]);
+
+  const removePhoto = useCallback((index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  // Task 28. No ticket yet — the human check has not delivered a fresh token — for
+  // as long as the widget is loading, refreshing, or has failed. When Turnstile is
+  // not configured at all (TURNSTILE_SITEKEY empty), there is nothing to wait for.
+  const notReady = TURNSTILE_SITEKEY !== "" && challenge !== "ready";
 
   return (
     <div className="flex flex-col gap-4">
@@ -471,7 +796,9 @@ export function UploadForm() {
         <span className="mt-[var(--s2)] block text-base font-medium">
           {files.length === 0
             ? `Sube de 1 a ${MAX_FILES} selfies`
-            : "Elegir otras fotos"}
+            : files.length < MAX_FILES
+              ? "Añadir más fotos"
+              : "Elegir otras fotos"}
         </span>
         <span className="mt-[var(--s1)] block text-sm text-[color:var(--muted-foreground)]">
           {files.length === 0
@@ -483,25 +810,44 @@ export function UploadForm() {
             data-sf-thumbs
             className="mt-[var(--s2)] flex flex-wrap justify-center gap-[var(--s1)]"
           >
-            {thumbs.map((thumb, i) =>
-              thumb.url ? (
-                <img
-                  key={i}
-                  src={thumb.url}
-                  alt={`Foto elegida ${i + 1}`}
-                  className="size-16 rounded-lg object-cover"
-                />
-              ) : (
-                <div
-                  key={i}
-                  role="img"
-                  aria-label={`Foto elegida ${i + 1}`}
-                  className="flex size-16 items-center justify-center rounded-lg border border-[color:var(--border)] bg-[color:var(--secondary)] text-xs font-medium text-[color:var(--muted-foreground)]"
+            {thumbs.map((thumb, i) => (
+              <div key={i} className="relative">
+                {thumb.url ? (
+                  <img
+                    src={thumb.url}
+                    alt={`Foto elegida ${i + 1}`}
+                    className="size-16 rounded-lg object-cover"
+                  />
+                ) : (
+                  <div
+                    role="img"
+                    aria-label={`Foto elegida ${i + 1}`}
+                    className="flex size-16 items-center justify-center rounded-lg border border-[color:var(--border)] bg-[color:var(--secondary)] text-xs font-medium text-[color:var(--muted-foreground)]"
+                  >
+                    {thumb.ext}
+                  </div>
+                )}
+                {/* O14, task 27. A real <button>, not a label: labels forward an
+                    unclaimed click to their control, and this one sits inside the
+                    dropzone's own label for #sf-files. preventDefault +
+                    stopPropagation is belt and braces against that, so removing a
+                    photo can never also reopen the file picker. h-11/w-11 is 44px,
+                    the tap-target floor tests/test_tap_targets.py holds everywhere
+                    else on this page. */}
+                <button
+                  type="button"
+                  aria-label={`Quitar foto ${i + 1}`}
+                  className="sf-focus absolute -top-3 -right-3 flex h-11 w-11 items-center justify-center rounded-full border border-[color:var(--border)] bg-[color:var(--background)] text-base font-medium text-[color:var(--muted-foreground)] hover:text-[color:var(--foreground)]"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    removePhoto(i);
+                  }}
                 >
-                  {thumb.ext}
-                </div>
-              ),
-            )}
+                  ×
+                </button>
+              </div>
+            ))}
           </div>
         ) : null}
         <input
@@ -511,26 +857,24 @@ export function UploadForm() {
           multiple
           className="sr-only"
           onChange={(e) => {
-            // O11. This used to store everything chosen, so picking five files rendered
-            // "5 de 4 elegidas" and `files.slice(0, MAX_FILES)` silently dropped the
-            // fifth at submit time. Count what is KEPT, and say what was not.
+            // O11/O14, task 27. THE BUG: this used to call setFiles(kept) with only
+            // the new selection, which threw away whatever was kept from an earlier
+            // pick — see storeCurrentPhotosForBuy above. Picking again now ADDS, up
+            // to MAX_FILES, skipping any file already kept (same name, size and
+            // last-modified — fileKey above). Task 28: an empty file or one over 12 MB
+            // is refused here too, before it is ever sent, keeping the rest.
             const chosen = Array.from(e.target.files ?? []);
-            const images = chosen.filter((f) => f.type.startsWith("image/"));
-            const kept = images.slice(0, MAX_FILES);
-            const rejected = chosen.length - images.length;
-            const dropped = images.length - kept.length;
-            setFiles(kept);
-            setHandle(null);
+            // Cleared straight away, so choosing the SAME file again always fires
+            // this handler again — without this, some browsers do not re-fire
+            // `change` for an unchanged input value, and a removed photo could never
+            // be picked a second time.
+            e.target.value = "";
+            const c = classifyChosenFiles(chosen, files);
+            if (c.toAdd.length > 0) setFiles([...files, ...c.toAdd]);
             setPreviewBroken(false);
-            setNotice(
-              rejected > 0
-                ? `Hemos ignorado ${rejected} ${rejected === 1 ? "archivo que no es una imagen" : "archivos que no son imágenes"}.`
-                : dropped > 0
-                  ? `Solo usamos las primeras ${MAX_FILES}. Hemos ignorado ${dropped} ${dropped === 1 ? "foto" : "fotos"}.`
-                  : "",
-            );
-            if (kept.length > 0)
-              track(EVENTS.uploadStart, { files: kept.length });
+            setNotice(noticeFor(c));
+            if (c.toAdd.length > 0)
+              track(EVENTS.uploadStart, { files: c.toAdd.length });
           }}
         />
       </label>
@@ -578,7 +922,47 @@ export function UploadForm() {
 
       {handle ? (
         <div className="flex flex-col gap-4">
-          {previewBroken ? (
+          {/* Task 27. THE BUG THIS REPLACES: a new pick used to erase this whole
+              block — preview, buy button and all — by nulling `handle`. Now the
+              preview stays exactly as it was, and this is the only thing that
+              changes: a plain statement of the two honest options, matching what
+              storeCurrentPhotosForBuy above can and cannot do today. */}
+          {!sameFileSet(files, previewedFiles) ? (
+            <div className="flex flex-col gap-[var(--s1)]">
+              <p
+                role="status"
+                className="text-sm text-[color:var(--muted-foreground)]"
+              >
+                Has cambiado las fotos. Puedes generar una prueba nueva o comprar
+                con las fotos actuales.
+              </p>
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={() => {
+                  setHandle(null);
+                  setPreviewedFiles([]);
+                  setPreviewBroken(false);
+                  // O1: same reason "Volver a intentarlo" resets the token below.
+                  refreshChallenge();
+                }}
+              >
+                Generar una prueba nueva
+              </Button>
+            </div>
+          ) : null}
+          {handle.limited ? (
+            // Task 29. The free previews for this hour are spent, but the handle is
+            // real and /api/checkout accepts it: the clothing selector and the buy
+            // button below are the "normal" ones, not a special-cased pair. Says only
+            // what the terms already promise — a purchase now, or a return in an hour.
+            <p
+              role="status"
+              className="text-sm text-[color:var(--foreground)]"
+            >
+              {LIMITED_MESSAGE}
+            </p>
+          ) : handle.preview_url === null ? null : previewBroken ? (
             <div
               role="alert"
               className="flex w-full max-w-xs flex-col gap-[var(--s2)] self-center rounded-xl border border-[color:var(--border)] p-[var(--s3)] text-center"
@@ -593,6 +977,7 @@ export function UploadForm() {
                 onClick={() => {
                   setPreviewBroken(false);
                   setHandle(null);
+                  setPreviewedFiles([]);
                   // O1: without this, "Volver a intentarlo" walked straight into the
                   // same spent token and got 403.
                   refreshChallenge();
@@ -663,10 +1048,20 @@ export function UploadForm() {
       ) : (
         <Button
           size="lg"
-          disabled={busy || files.length === 0 || challenge === "refreshing"}
+          // Task 28. Before this, the button was only disabled while a token was
+          // being refreshed after a previous attempt — the FIRST wait, before
+          // Turnstile has ever delivered a ticket, did not disable it at all, so a
+          // fast click sent an empty token and got 403. `notReady` covers every state
+          // that is not "ready" — waiting, refreshing, failed — because none of them
+          // has a ticket to spend.
+          disabled={busy || files.length === 0 || notReady}
           onClick={preview}
         >
-          {busy ? "Generando tu prueba…" : "Ver una prueba gratis"}
+          {busy
+            ? "Generando tu prueba…"
+            : notReady
+              ? "Comprobando que eres una persona"
+              : "Ver una prueba gratis"}
         </Button>
       )}
     </div>

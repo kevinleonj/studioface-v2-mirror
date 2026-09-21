@@ -176,7 +176,12 @@ def test_preview_rate_limit_keys_on_the_trailing_forwarded_for_entry():
     same_visitor_new_leading_entry = _preview(client, "1.2.3.4, 10.0.0.5")
     assert same_visitor_new_leading_entry.status_code == 200
     same_visitor_spoofed_leading_entry = _preview(client, "9.9.9.9, 10.0.0.5")
-    assert same_visitor_spoofed_leading_entry.status_code == 429, (
+    # Task 29: being capped no longer means a 429 — /api/preview stores the photos
+    # and signs a handle instead (`limited: true`). That field can only be true if
+    # RateLimiter.check keyed this second request the same as the first, so it is
+    # still the proof this test is named for.
+    assert same_visitor_spoofed_leading_entry.status_code == 200
+    assert same_visitor_spoofed_leading_entry.json()["limited"] is True, (
         "the same visitor spoofing a new leading entry must still be capped"
     )
 

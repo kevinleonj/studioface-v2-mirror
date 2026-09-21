@@ -19,6 +19,13 @@
  * `position: static`, not sticky: the skill forbids anything fixed covering content at
  * scroll 0, and a sticky header on a 844px-tall phone spends 56px of the first viewport
  * on chrome for a page you scroll once.
+ *
+ * Task 25, 21 Sep 2026: the underline on these two links skipped a chunk right after
+ * the "f" in "fotos" / "funciona" at high zoom, reading as a space ("mis f otos").
+ * Screenshots ruled out kerning, ligatures and the variable-font instance; only turning
+ * off Chromium's own text-decoration-skip-ink (the browser hiding the line under a
+ * glyph's ink) removed it. Public Sans and its next/font loading are unchanged — this
+ * is a decoration setting, not a font setting. docs/audit/letter-gap-2026-09-21.md.
  */
 
 import { PRICE_LABEL } from "@/lib/config";
@@ -51,7 +58,7 @@ export function SiteHeader() {
               <a
                 key={link.href}
                 href={link.href}
-                className="sf-focus inline-flex min-h-[44px] items-center text-[color:var(--foreground)] underline decoration-[color:var(--primary)] underline-offset-4"
+                className="sf-focus inline-flex min-h-[44px] items-center text-[color:var(--foreground)] underline decoration-[color:var(--primary)] underline-offset-4 [text-decoration-skip-ink:none]"
               >
                 {link.label}
               </a>

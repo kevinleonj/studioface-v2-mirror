@@ -50,13 +50,27 @@ class Preview:
     sign: Callable[[str], str]  # gs:// uri -> a short-lived signed https URL
     style: str = PREVIEW_STYLE
 
-    def __call__(self, files: list[bytes], batch: str) -> str:
-        """`batch` is minted by the HTTP layer, which signs it for the checkout call."""
+    def _store_sources(self, files: list[bytes], batch: str) -> list[str]:
+        """The half of a preview that costs nothing but storage. Task 29 gives this
+        its own name because it is now also called on its own: when the free-preview
+        limit is reached, and when the buy button needs to re-back a purchase with a
+        changed set of photos, neither of which may call `self.model`."""
         if not files:
             raise ValueError("no_files")
         images = normalise_all(files)  # raises before anything is stored or paid for
         uris = [self.put_source(f"previews/{batch}/{i}.jpg", data) for i, data in enumerate(images)]
         logger.info("preview sources stored batch=%s count=%d", batch, len(uris))
+        return uris
+
+    def store_only(self, files: list[bytes], batch: str) -> None:
+        """Store the uploaded photos and nothing else. Calls nothing that costs
+        money — no `self.model.edit`, ever — so it is safe to run past the free
+        preview limit, bounded instead by `RateLimiter.check_store`."""
+        self._store_sources(files, batch)
+
+    def __call__(self, files: list[bytes], batch: str) -> str:
+        """`batch` is minted by the HTTP layer, which signs it for the checkout call."""
+        uris = self._store_sources(files, batch)
         remote = self.model.edit(uris, build_prompt(self.style, 0))
         stored = self.store_result(f"previews/{batch}/preview.jpg", remote)
         logger.info("preview result stored batch=%s", batch)

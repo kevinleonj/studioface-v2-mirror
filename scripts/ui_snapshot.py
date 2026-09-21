@@ -29,8 +29,15 @@ VIEWPORTS = {"360x640": (360, 640), "390x844": (390, 844), "1440x900": (1440, 90
 
 # Every route the export serves. `/g/` is visited without a token, which is the state a
 # stranger following a stale link sees, and one of the pages locked by section 2.
+#
+# Task 23 adds the two Google Ads landing pages. They share the fold-clearing shape U5
+# proved for home (H1, slider, first-screen CTA, uploader, banner) through the same
+# selectors in TARGETS below, so tests/test_fold_geometry.py can hold them to the same
+# geometry without a second set of selectors.
 PAGES = {
     "home": "/",
+    "foto-cv": "/foto-cv/",
+    "foto-linkedin": "/foto-linkedin/",
     "recuperar": "/recuperar/",
     "gallery": "/g/",
     "legal-aviso": "/legal/aviso-legal/",

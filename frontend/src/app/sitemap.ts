@@ -16,10 +16,16 @@ const SITE = "https://studioface.app";
 // /internal/ are excluded from crawling in robots.ts and have no listing here either.
 const LEGAL_PAGES = ["aviso-legal", "privacidad", "terminos", "cookies"];
 
+// Task 23. The two Google Ads landing pages (frontend/src/app/foto-cv/page.tsx,
+// frontend/src/app/foto-linkedin/page.tsx) — sale pages, same as home, so a crawler
+// should reach them the same way.
+const AD_PAGES = ["foto-cv", "foto-linkedin"];
+
 export default function sitemap(): MetadataRoute.Sitemap {
   const now = new Date();
   return [
     { url: `${SITE}/`, lastModified: now },
+    ...AD_PAGES.map((slug) => ({ url: `${SITE}/${slug}/`, lastModified: now })),
     ...LEGAL_PAGES.map((slug) => ({
       url: `${SITE}/legal/${slug}/`,
       lastModified: now,

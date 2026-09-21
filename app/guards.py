@@ -17,14 +17,13 @@ from typing import Protocol
 
 
 class Counter(Protocol):
-    """Atomic counter shared by ALL Cloud Run instances.
-
-    Production adapter: Firestore transaction (adapters/firestore_counter.py).
-    Test adapter: MemoryCounter below. Never a per-process dict in production:
-    Cloud Run runs many instances and each would keep its own count.
-    """
+    """Atomic counter shared by ALL Cloud Run instances. Production adapter:
+    Firestore transaction (adapters/firestore_counter.py). Test adapter:
+    MemoryCounter below. Never a per-process dict: many instances, one count."""
 
     def increment_if_below(self, key: str, limit: int, ttl_s: int) -> bool: ...
+
+    def decrement(self, key: str) -> None: ...
 
 
 @dataclass
@@ -43,6 +42,17 @@ class MemoryCounter:
         self.store[key] = (n + 1, exp)
         return True
 
+    def decrement(self, key: str) -> None:
+        """Give back one try. A rolled-over window or a count already at 0 is left
+        alone, so this can never resurrect a stale document or underflow."""
+        if key not in self.store:
+            return
+        t = self.now()
+        n, exp = self.store[key]
+        if t >= exp or n <= 0:
+            return
+        self.store[key] = (n - 1, exp)
+
 
 @dataclass
 class RateLimiter:
@@ -58,6 +68,10 @@ class RateLimiter:
     per_subnet: int = 20
     window_s: int = 3600
     daily_global: int = 300
+    # Task 29: storing photos without generating is cheap but not free, so the
+    # fallback that keeps the buy button alive once `per_client` is spent still has a
+    # ceiling of its own — ten stored batches per visitor per hour, then the real 429.
+    per_store: int = 10
     salt: str = "change-me"
     now: Callable[[], float] = time.time
 
@@ -65,25 +79,46 @@ class RateLimiter:
         return hashlib.sha256("|".join((self.salt, *parts)).encode()).hexdigest()[:24]
 
     def check_named(self, action: str, ip: str, limit: int, window_s: int) -> bool:
-        """A ceiling for something other than the preview, on the same shared counter
-        but under its own key, so the two budgets cannot eat each other."""
+        """A ceiling for something other than the preview, under its own key, so the
+        two budgets cannot eat each other."""
         return self.counter.increment_if_below(f"{action}:{self._hash(ip)}", limit, window_s)
 
-    def check(self, ip: str, user_agent: str) -> tuple[bool, str]:
+    def check_store(self, ip: str, user_agent: str) -> bool:
+        """Task 29's own ceiling, in its own namespace (`store:`) so it can never eat
+        the preview budget's keys or be eaten by them. Same client identity as
+        `check` (ip+user_agent hash) — a visitor's storage budget is the same visitor
+        whether or not the model ever ran for them."""
+        key = f"store:{self._hash(ip, user_agent)}"
+        return self.counter.increment_if_below(key, self.per_store, self.window_s)
+
+    def _keys(self, ip: str, user_agent: str) -> tuple[str, str, str]:
+        """The three keys one preview touches. `check` and `refund` both call this,
+        so the two can never drift apart and give back the wrong document."""
         day = str(int(self.now() // 86400))
         subnet = ".".join(ip.split(".")[:3]) if ip.count(".") == 3 else ip
+        return f"c:{self._hash(ip, user_agent)}", f"s:{self._hash(subnet)}", f"g:{day}"
+
+    def check(self, ip: str, user_agent: str) -> tuple[bool, str]:
+        client_key, subnet_key, daily_key = self._keys(ip, user_agent)
         # Narrow ceilings first, so a rejected client never consumes global budget.
-        if not self.counter.increment_if_below(
-            f"c:{self._hash(ip, user_agent)}", self.per_client, self.window_s
-        ):
+        if not self.counter.increment_if_below(client_key, self.per_client, self.window_s):
             return False, "client_cap"
-        if not self.counter.increment_if_below(
-            f"s:{self._hash(subnet)}", self.per_subnet, self.window_s
-        ):
+        if not self.counter.increment_if_below(subnet_key, self.per_subnet, self.window_s):
             return False, "subnet_cap"
-        if not self.counter.increment_if_below(f"g:{day}", self.daily_global, 86400):
+        if not self.counter.increment_if_below(daily_key, self.daily_global, 86400):
             return False, "daily_cap"
         return True, "ok"
+
+    def refund(self, ip: str, user_agent: str) -> None:
+        """Give back the try `check` just granted, because the model refused or
+        failed. Task 28: count BEFORE the model call, refund after a failure — chosen
+        over counting only after success, which needs a non-atomic peek and reopens
+        the race two requests both seeing "2 used" and both proceeding at real fal
+        cost. Traded away: a process dying between `check` and this call keeps the
+        try spent. HANDOFF.md, task 28, has the full reasoning.
+        """
+        for key in self._keys(ip, user_agent):
+            self.counter.decrement(key)
 
 
 # ---------------------------------------------------------------- upload validation

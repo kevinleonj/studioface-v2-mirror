@@ -270,7 +270,10 @@ def test_preview_requires_turnstile_then_rate_limits_then_validates():
     assert c.post("/api/preview", files=files, data={"turnstile_token": "x"}).status_code == 403
     assert c.post("/api/preview", files=files, data=ok).status_code == 200
     assert c.post("/api/preview", files=files, data=ok).status_code == 200
-    assert c.post("/api/preview", files=files, data=ok).status_code == 429  # per_client=2
+    # Task 29: per_client=2 no longer means a 429 here. The shop still sells —
+    # /api/preview stores the photos and signs a handle instead, `limited: true`.
+    r = c.post("/api/preview", files=files, data=ok)
+    assert r.status_code == 200 and r.json()["limited"] is True
     bad = [("files", ("a.jpg", TXT, "image/jpeg"))]  # lies in header
     r = c.post("/api/preview", files=bad, data=ok, headers={"x-forwarded-for": "5.5.5.5"})
     assert r.status_code == 422 and "unsupported_type" in r.text
