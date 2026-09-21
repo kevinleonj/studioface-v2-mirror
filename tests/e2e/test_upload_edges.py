@@ -401,6 +401,95 @@ def test_the_preview_and_buy_button_survive_a_reload(page):
     assert resign_calls["count"] == 1, "the reload should ask once for a fresh signed address"
 
 
+# ---------------------------------------------------------------- task 34
+#
+# buy-with-changed-photos (work/queue/34-buy-with-changed-photos.md). WHY: task 31's
+# drop-the-refused-file fix (test_server_refusal_drops_only_the_refused_file, above)
+# was only ever proven for the free-preview path. The buy button calls the SAME
+# /api/preview endpoint from a different place — storeCurrentPhotosForBuy, used when
+# the kept photos have changed since the last preview — and that call was never
+# exercised for a server refusal. These two cases are the first exercise of that path.
+
+
+def fake_preview_but_let_store_only_through(page, handle: dict = FAKE_HANDLE) -> None:
+    """Same technique as fake_preview, except a request carrying `store_only` (the
+    field storeCurrentPhotosForBuy adds to the SAME /api/preview endpoint,
+    app/main.py's _register_preview) is let through to the real loopback server
+    instead of being answered here. That is how these tests get a REAL refusal out of
+    validate_uploads for the buy path — the same real refusal
+    test_server_refusal_drops_only_the_refused_file gets for the preview path — while
+    the ordinary preview that opens each test still never reaches the server or fal.
+    post_data_buffer (bytes), not post_data (str): the body carries real JPEG bytes,
+    which are not valid UTF-8 and would make a text read of the body unreliable."""
+
+    def handler(route):
+        body = route.request.post_data_buffer or b""
+        if b"store_only" in body:
+            route.continue_()
+        else:
+            route.fulfill(status=200, json=handle)
+
+    page.route("**/api/preview", handler)
+
+
+def test_buy_with_a_refused_file_drops_it_and_names_it(page):
+    """The visitor already has a preview and a buy button, then adds a file the
+    server will refuse, and presses buy. Before this task's fix: storeCurrentPhotosForBuy's
+    own catch block never looked at which file the server named, so it showed a
+    generic sentence and left the refused file in the kept set forever — the same bug
+    task 31 fixed for the free-preview path, never fixed here. A text file saved
+    under a .jpg name is used for the same reason test_server_refusal_drops_only_the_
+    refused_file uses one: it passes the browser's own image/* filter but fails the
+    server's real magic-byte sniff(), so this is a genuine refusal, not a staged one."""
+    open_app(page)
+    choose(page, FACE)
+    fake_preview_but_let_store_only_through(page)
+    page.get_by_role("button", name="Ver una prueba gratis").click()
+    page.wait_for_selector("img[alt='Prueba gratuita de tu foto de perfil']")
+
+    tmp = Path(tempfile.mkdtemp())
+    try:
+        bad = tmp / "not-really-a-photo.jpg"
+        bad.write_bytes(b"this is a text file wearing a .jpg name\n" * 10)
+        choose(page, bad)  # added after the preview, alongside the kept FACE
+        expect_thumb_count(page, 2)
+
+        page.get_by_role("button", name="Comprar las cuatro fotos por 19,99 €").click()
+
+        error = page.locator("p[role='alert']")
+        error.wait_for()
+        text = error.inner_text()
+        assert "not-really-a-photo.jpg" in text, text  # names which file was dropped
+
+        expect_thumb_count(page, 1)  # the refused file is gone, the good one stays
+        assert page.get_by_text("1 de 4 elegidas").is_visible()
+        buy = page.get_by_role("button", name="Comprar las cuatro fotos por 19,99 €")
+        assert buy.is_visible() and buy.is_enabled(), (
+            "the visitor must never be stuck: the buy button must still work "
+            "with the photos that remain"
+        )
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_buy_button_will_not_sell_an_empty_set(page):
+    """A preview exists (and so does the stored handle behind the buy button), then
+    every photo is removed. The buy button must not offer to sell zero photos — it
+    must never send a batch with nothing in it."""
+    open_app(page)
+    choose(page, FACE)
+    fake_preview(page)
+    page.get_by_role("button", name="Ver una prueba gratis").click()
+    page.wait_for_selector("img[alt='Prueba gratuita de tu foto de perfil']")
+
+    page.get_by_label("Quitar foto 1").click()
+    expect_thumb_count(page, 0)
+
+    buy = page.get_by_role("button", name="Comprar las cuatro fotos por 19,99 €")
+    assert buy.is_visible(), "the button stays on screen, it just must not be usable"
+    assert buy.is_disabled(), "the buy button must not offer to sell an empty set"
+
+
 def test_the_preview_and_buy_button_survive_returning_from_the_payment_page(page):
     """Simulates Stripe's own cancel_url — the home page plus `?cancelado=1`, an
     inert query parameter — by navigating there directly: the same full page

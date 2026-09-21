@@ -1,12 +1,20 @@
 "use client";
 
 /**
- * Gallery. Reads ?o=<order>&t=<token> and polls every 3 s until delivered.
+ * Gallery. Reads #o=<order>&t=<token> and polls every 3 s until delivered.
  *
- * The query string is read from window.location in an effect, not with
- * useSearchParams: this is a static export, and useSearchParams forces the whole
- * route into a client-side-rendering bailout that next build refuses without a
- * Suspense boundary. There is no server to read it anyway.
+ * The fragment is read from window.location in an effect, not with useSearchParams:
+ * this is a static export, and useSearchParams forces the whole route into a
+ * client-side-rendering bailout that next build refuses without a Suspense boundary.
+ * There is no server to read it anyway — and a fragment never reaches a server at all,
+ * which is the whole point (task 31). An old-shape link (?o=&t=) still works: the
+ * GalleryLinkRewrite script in components/consent.tsx moves it into the fragment,
+ * before this component ever mounts, so this file only ever sees the fragment shape.
+ *
+ * The key travels to the server in a request header (X-Gallery-Token), never in the
+ * URL, so it cannot end up in an access log or a Referer. The old path-shaped route
+ * (/api/orders/{order}/{token}) still exists server-side for links already sent, but
+ * nothing here calls it any more.
  *
  * Image URLs are signed and expire in 15 minutes, so they are fetched fresh on each
  * poll and never cached in the page.
@@ -72,7 +80,11 @@ export default function GalleryPage() {
 
   const poll = useCallback(async (order: string, token: string) => {
     try {
-      const res = await fetch(`/api/orders/${order}/${token}`);
+      // Task 31: the key rides a request header, never the URL, so it cannot land in
+      // an access log or a Referer the way a path segment or a query parameter would.
+      const res = await fetch(`/api/orders/${order}`, {
+        headers: { "X-Gallery-Token": token },
+      });
       if (res.status === 404) {
         if (Date.now() - startedAt.current < NOTFOUND_GRACE_MS) {
           // Almost certainly the webhook has not landed yet. Keep waiting.
@@ -136,7 +148,12 @@ export default function GalleryPage() {
   }, []);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    // Fragment only: GalleryLinkRewrite (components/consent.tsx) has already moved an
+    // old-shape ?o=&t= link here before this component ever mounts (it runs
+    // beforeInteractive, ahead of hydration), and every current link is minted in this
+    // shape from the start (app/main.py, app/core.py). window.location.hash keeps its
+    // leading "#", which URLSearchParams would otherwise read as part of the first key.
+    const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
     const order = params.get("o");
     const token = params.get("t");
     if (!order || !token) {

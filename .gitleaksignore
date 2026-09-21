@@ -29,3 +29,22 @@
 # docs/GO-LIVE.md. Not spelled out in full here on purpose, so this entry's own text
 # does not reintroduce the same finding on itself.
 c54b2b6dd79f7e4366ebf790c3ba85b6455ecbc5:docs/audit/go-live-dry-run-2026-09-20.txt:generic-api-key:125
+
+# 0c7cbd1 — scripts/check_gallery_privacy.py's own KEY constant,
+# "0123456789abcdef0123456789abcdef". The script's docstring says exactly what it is:
+# a made-up gallery token opened against a made-up order id so the check "costs
+# nothing and sends nothing" — never a value issued by delivery_token() for any real
+# order. It is 32 hex characters, the same width delivery_token() produces, which is
+# why the generic-api-key rule fires on it: same false-positive shape as the two
+# entries above, a high-entropy literal that is public/synthetic by construction
+# rather than a credential. The task that added this file said to keep it byte for
+# byte as committed, so the fix is here, not in the script.
+0c7cbd13d605c0abad17a688d24ac6b07bf95cbe:scripts/check_gallery_privacy.py:generic-api-key:18
+
+# 3e218c0 — the task 31 HANDOFF.md write-up quoted that same synthetic KEY constant
+# in full, formatted as `KEY = "..."`, which is exactly the assignment shape the
+# generic-api-key rule matches (the entry directly above, written as a plain comment
+# with no "=", did not trip it). A later commit on this same branch rewrote that
+# paragraph to describe the constant instead of quoting it; this entry only covers
+# the earlier snapshot, which still exists in history.
+3e218c07b977b536748fbb40dc5649982f2bb55b:HANDOFF.md:generic-api-key:3743

@@ -71,7 +71,7 @@ def test_a_delivered_order_gets_its_link_resent():
     assert r.status_code == 200 and r.json() == {"sent": True}
     to, body = emails[0]
     assert to == "cliente@example.com"
-    assert body == f"https://studioface.app/g/?o=cs_1&t={delivery_token('cs_1', APP_SECRET)}"
+    assert body == f"https://studioface.app/g/#o=cs_1&t={delivery_token('cs_1', APP_SECRET)}"
 
 
 def test_the_address_is_matched_case_insensitively_and_trimmed():
@@ -178,7 +178,7 @@ def test_recovery_works_end_to_end_against_the_firestore_store():
     c, _, emails = build(store=store)
     store.put(an_order("cs_9"))
     assert recover(c, "cliente@example.com").json() == {"sent": True}
-    assert emails[0][1].startswith("https://studioface.app/g/?o=cs_9&t=")
+    assert emails[0][1].startswith("https://studioface.app/g/#o=cs_9&t=")
 
 
 if __name__ == "__main__":

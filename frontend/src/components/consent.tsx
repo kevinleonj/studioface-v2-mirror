@@ -32,6 +32,33 @@ declare global {
   }
 }
 
+// The gallery's order id and delivery key travel in the page address. Task 31,
+// measured from outside 21 Sep 2026: an old-shape link (/g/?o=...&t=...) sent both to
+// Google Analytics on load, cookies or no cookies, because the query string was still
+// there when gtag.js read the page's address. A fragment (#o=...&t=...) is never sent
+// to any server by the browser, so this rewrites the address BEFORE anything else runs
+// — it is the very first script in <head>, ahead of ConsentDefaults and every Google
+// script, so the leak cannot happen on the first load either.
+//
+// Every new link (the redirect after payment, the delivery email, the recover-my-photos
+// email — app/main.py, app/core.py) already produces the fragment shape; this exists
+// only for links already sitting in a customer's inbox in the old shape. It reads and
+// writes location only — nothing here is ever logged or printed.
+export function GalleryLinkRewrite() {
+  return (
+    <Script id="sf-gallery-link-rewrite" strategy="beforeInteractive">
+      {`(function(){
+var l=window.location;
+if(l.pathname!=='/g/'||!l.search){return;}
+var p=new URLSearchParams(l.search);
+var o=p.get('o'),t=p.get('t');
+if(!o||!t){return;}
+window.history.replaceState(null,'',l.pathname+'#o='+encodeURIComponent(o)+'&t='+encodeURIComponent(t));
+})();`}
+    </Script>
+  );
+}
+
 export function ConsentDefaults() {
   const defaults = SIGNALS.map((s) => `${s}:'denied'`).join(",");
   return (
@@ -58,7 +85,16 @@ export function Analytics() {
         src={`https://www.googletagmanager.com/gtag/js?id=${GA4_ID}`}
       />
       <Script id="sf-gtag-config" strategy="afterInteractive">
-        {`gtag('js',new Date());gtag('config','${GA4_ID}');`}
+        {`gtag('js',new Date());
+// Task 31: gtag's own default for page_location is document.location.href, which
+// still includes the fragment GalleryLinkRewrite just moved the key into. Only the
+// gallery route needs the override — every other page keeps today's behaviour
+// (default page_location), so gclid-based ad attribution elsewhere is untouched.
+if(window.location.pathname==='/g/'){
+gtag('config','${GA4_ID}',{page_path:'/g/',page_location:window.location.origin+'/g/'});
+}else{
+gtag('config','${GA4_ID}');
+}`}
       </Script>
     </>
   );

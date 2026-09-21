@@ -131,10 +131,13 @@ def test_every_ai_image_is_disclosed_in_visible_copy_and_alt_text(slug):
 
 
 @pytest.mark.parametrize("slug", PAGES)
-def test_exactly_three_faq_questions_and_they_match_between_the_two_pages(slug):
+def test_exactly_four_faq_questions_and_they_match_between_the_two_pages(slug):
+    """Task 33: the retention question joined the three already here so the ad claim
+    'Tus fotos se borran a los 7 días' (docs/ads/rsa.json) actually appears on the page
+    the ad points to — see frontend/src/content/ad-pages.ts, SHARED_FAQ."""
     body = html_for(slug)
     questions = re.findall(r"<summary[^>]*>([^<]*)</summary>", body)
-    assert len(questions) == 3, f"{slug}: {len(questions)} FAQ questions, expected 3"
+    assert len(questions) == 4, f"{slug}: {len(questions)} FAQ questions, expected 4"
 
 
 def test_the_three_faq_questions_are_identical_on_both_pages():

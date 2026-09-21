@@ -699,7 +699,12 @@ export function UploadForm() {
   }, [files, refreshChallenge]);
 
   const checkout = useCallback(async () => {
-    if (!handle) return;
+    // Task 34 (buy-with-changed-photos). A visitor who removes every photo after a
+    // preview still holds a signed handle (see the buy button's own `disabled` guard
+    // below), but there is nothing left to sell — app/guards.py's validate_uploads
+    // would refuse 0 files as `upload_count:0` anyway; this is the client-side half
+    // of that same refusal, never offering the click in the first place.
+    if (!handle || files.length === 0) return;
     setBusy(true);
     setError("");
     // Task 27/29. The buy button must sell what the visitor is currently looking at,
@@ -712,12 +717,28 @@ export function UploadForm() {
         active = await storeCurrentPhotosForBuy(files, turnstileToken.current);
       } catch (e) {
         setBusy(false);
-        setError(
-          messageFor(
-            e instanceof Error ? e.message : undefined,
-            "Todavía no podemos comprar fotos distintas a las de tu prueba. Genera una prueba nueva con las fotos actuales.",
-          ),
+        // Task 34 (buy-with-changed-photos). Mirrors preview()'s own fix (task 31,
+        // refusedFileIndex above): storeCurrentPhotosForBuy calls the SAME
+        // /api/preview endpoint and gets the SAME `unsupported_type:<i>` /
+        // `file_too_large:<i>` shape back. Before this, a refused file added before
+        // buying stayed in the kept set forever — every later press of "Comprar"
+        // re-sent it and was refused again, with no way out.
+        const detail = e instanceof Error ? e.message : undefined;
+        const idx = refusedFileIndex(detail);
+        const base = messageFor(
+          detail,
+          "Todavía no podemos comprar fotos distintas a las de tu prueba. Genera una prueba nueva con las fotos actuales.",
         );
+        if (idx !== null && idx < files.length) {
+          const dropped = files[idx];
+          setFiles((prev) => prev.filter((_, i) => i !== idx));
+          setError(
+            `${base} Hemos quitado "${dropped.name}" de tus fotos. Puedes comprar ` +
+              "con las que quedan o añadir otra.",
+          );
+        } else {
+          setError(base);
+        }
         return;
       }
       setHandle(active);
@@ -1041,7 +1062,16 @@ export function UploadForm() {
               </p>
             ) : null}
           </div>
-          <Button ref={buyButton} size="lg" disabled={busy} onClick={checkout}>
+          <Button
+            ref={buyButton}
+            size="lg"
+            // Task 34. `handle` can outlive the photos it was made from — a visitor
+            // who removes every kept photo still holds a signed handle from an
+            // earlier preview — so this must check `files.length` too, not just
+            // `busy`, the same way the free-preview button below already does.
+            disabled={busy || files.length === 0}
+            onClick={checkout}
+          >
             Comprar las cuatro fotos por {PRICE_LABEL}
           </Button>
         </div>

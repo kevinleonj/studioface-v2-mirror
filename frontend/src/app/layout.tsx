@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 import { Newsreader, Public_Sans } from "next/font/google";
-import { Analytics, ConsentBanner, ConsentDefaults } from "@/components/consent";
+import {
+  Analytics,
+  ConsentBanner,
+  ConsentDefaults,
+  GalleryLinkRewrite,
+} from "@/components/consent";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { SITE_URL } from "@/lib/config";
@@ -38,6 +43,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${newsreader.variable} ${publicSans.variable} h-full antialiased`}
     >
       <head>
+        {/* Task 31: must run before ConsentDefaults and before any Google script —
+            see GalleryLinkRewrite's own comment in components/consent.tsx. */}
+        <GalleryLinkRewrite />
         <ConsentDefaults />
       </head>
       <body className="flex min-h-full flex-col bg-[color:var(--background)] text-[color:var(--foreground)]">

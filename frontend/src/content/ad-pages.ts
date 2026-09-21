@@ -25,18 +25,24 @@ export type AdPageContent = {
   description: string;
   /** 60-90 words, written for this reader. */
   intro: string;
-  /** The three FAQ questions this page shows, in the order shown — identical text to
+  /** The four FAQ questions this page shows, in the order shown — identical text to
    *  components/faq.tsx so there is one source of truth for the answer, not two. */
-  faqQuestions: readonly [string, string, string];
+  faqQuestions: readonly [string, string, string, string];
 };
 
-// Same three questions on both pages ("three matching questions from the FAQ", brief):
-// the identity objection that stops anyone from paying, what the money buys, and the
-// one real refund condition — the three a visitor arriving from a search ad needs
-// before they will hand over four selfies to a page they have never seen before.
-const SHARED_FAQ: readonly [string, string, string] = [
+// Task 33: docs/ads/rsa.json promises "Tus fotos se borran a los 7 días" in every ad's
+// descriptions, but that sentence lived only in the FAQ's fourth question, which these
+// pages did not show. scripts/check_ad_claims.py checks every ad claim against the
+// rendered page it points to, so an ad running with a claim its own landing page never
+// states is exactly what it exists to catch. "¿Qué pasa con mis fotos?" joins the three
+// questions already here — the identity objection that stops anyone from paying, what
+// the money buys, the retention promise the ad makes, and the one real refund
+// condition — the four a visitor arriving from a search ad needs before they will hand
+// over four selfies to a page they have never seen before.
+const SHARED_FAQ: readonly [string, string, string, string] = [
   "¿Me voy a parecer a mí?",
   "¿Qué recibo por 19,99 €?",
+  "¿Qué pasa con mis fotos?",
   "¿Cuándo devolvéis el dinero?",
 ];
 

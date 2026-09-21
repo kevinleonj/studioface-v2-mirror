@@ -182,7 +182,7 @@ export default function Home() {
           <a
             data-recover-under-uploader
             href="/recuperar/"
-            className="sf-focus inline-flex min-h-[44px] items-center text-[color:var(--muted-foreground)] underline decoration-[color:var(--primary)] underline-offset-4"
+            className="sf-focus inline-flex min-h-[44px] items-center text-[color:var(--muted-foreground)] underline decoration-[color:var(--primary)] underline-offset-4 [text-decoration-skip-ink:none]"
           >
             ¿Ya has comprado? Recuperar mis fotos
           </a>

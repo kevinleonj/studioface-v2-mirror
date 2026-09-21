@@ -333,7 +333,7 @@ def test_static_frontend_served_after_api_routes(tmp_path):
     assert c.get(HEALTH_PATH).json()["ok"] is True  # API still wins over the static mount
 
 
-def test_gallery_link_uses_query_form():
+def test_gallery_link_uses_fragment_form():
     store = OrderStore()
     emails = []
     p = Pipeline(
@@ -349,7 +349,9 @@ def test_gallery_link_uses_query_form():
         Order(id="o9", email="k@x", source_image_urls=["u"], style="corporativo", amount_cents=1)
     )
     p.run("o9")
-    assert emails[0].startswith("https://studioface.app/g/?o=o9&t=")
+    # Task 31: a fragment, never a query — a fragment is never sent to any server.
+    assert emails[0].startswith("https://studioface.app/g/#o=o9&t=")
+    assert "?" not in emails[0]
 
 
 # ---------------------------------------------------------------- gallery signing

@@ -218,7 +218,7 @@ def test_one_order_from_heic_upload_to_four_signed_gallery_links():
 
     # 4. the customer gets exactly one email, carrying the HMAC gallery link
     token = delivery_token("cs_live_1", APP_SECRET)
-    link = f"https://studioface.app/g/?o=cs_live_1&t={token}"
+    link = f"https://studioface.app/g/#o=cs_live_1&t={token}"
     assert w["emails"] == [("cliente@example.com", link)]
     assert w["conv"] == ["cs_live_1"]
     assert w["refunds"] == []

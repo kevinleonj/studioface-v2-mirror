@@ -49,7 +49,8 @@ class ModelRefused(Exception):
         self.detail = detail
 
 
-# Query form so the static export needs one /g/ page, not a route per order.
+# o= and t= are appended as a FRAGMENT (#o=...&t=...), not a query, so the static
+# export needs one /g/ page and the key is never sent to any server (task 31).
 GALLERY_BASE = "https://studioface.app/g/"
 
 # ---------------------------------------------------------------- utilities
@@ -260,7 +261,10 @@ class Pipeline:
             order.status = "delivered"
             self.store.put(order)
             token = delivery_token(order.id, self.secret)
-            self.send_email(order.email, f"{GALLERY_BASE}?o={order.id}&t={token}")
+            # Fragment, never a query: a fragment is a browser-only concept and is
+            # never sent to any server, so it cannot reach an access log, a Referer or
+            # an analytics request the way a query string does (task 31).
+            self.send_email(order.email, f"{GALLERY_BASE}#o={order.id}&t={token}")
             self.track_conversion(order)
         else:
             self._refund(order)

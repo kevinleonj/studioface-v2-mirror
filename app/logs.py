@@ -13,12 +13,19 @@ one. `json` and `logging` are standard library: no new dependency.
 
 Never log a whole session or order id. `id_prefix` keeps twelve characters, which is
 enough to correlate two lines and not enough to look anything up.
+
+Task 32: that rule covered every line this app writes itself, but uvicorn writes its
+own request line straight to `uvicorn.access`, unprefixed, and an old-shape gallery
+link (a query string, or the path in `/api/orders/{order}/{token}`) put the whole
+gallery key in that line. `JsonFormatter` now redacts `uvicorn.access` records only,
+after uvicorn renders them and before this module writes them.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import re
 import sys
 import time
 from typing import Any, TextIO
@@ -29,10 +36,38 @@ EXTRA_FIELDS = ("route", "order", "batch", "call", "latency_ms", "detail", "stat
 
 ID_PREFIX_LENGTH = 12
 
+# uvicorn writes its own request line to this logger, verbatim, AFTER this module's
+# id_prefix() rule has already run for every line the app writes itself. Task 31
+# stopped the app from ever handing out a link that puts the gallery key where a
+# browser sends it to a server, but two shapes still can:
+#   - an old link already in an inbox (query-string shape, pre-task-31: ?o=...&t=...)
+#   - GET /api/orders/{order}/{token}, kept alive only for those old links
+# Cloud Run's own copy of the request (separate from this app's stdout) cannot be
+# touched from here at all; task 31 emptying out the old shape over time is the only
+# fix for that one. This is only the line this app writes.
+ACCESS_LOGGER_NAME = "uvicorn.access"
+_TOKEN_QUERY_PARAM = re.compile(r"(?<=[?&])t=[^&\s\"]*")
+_ORDER_PATH = re.compile(r"(/api/orders/)([^/\s\"]+)(/[^\s\"]+)?")
+
 
 def id_prefix(value: str | None) -> str:
     """The first twelve characters of an id, which is a handle and not a key."""
     return (value or "")[:ID_PREFIX_LENGTH]
+
+
+def _redact_order_path(match: re.Match[str]) -> str:
+    prefix, order, token = match.group(1), match.group(2), match.group(3)
+    redacted = f"{prefix}{id_prefix(order)}"
+    return f"{redacted}/redacted" if token else redacted
+
+
+def _redact_access_line(message: str) -> str:
+    """Only called for `uvicorn.access` records (see JsonFormatter.format below).
+    Never touches an ordinary app log line, so a message that merely contains the
+    text "t=" for some unrelated reason is left exactly as it was."""
+    message = _ORDER_PATH.sub(_redact_order_path, message)
+    message = _TOKEN_QUERY_PARAM.sub("t=redacted", message)
+    return message
 
 
 class JsonFormatter(logging.Formatter):
@@ -40,6 +75,8 @@ class JsonFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:
         message = record.getMessage()
+        if record.name == ACCESS_LOGGER_NAME:
+            message = _redact_access_line(message)
         if record.exc_info:
             # Keep the traceback as text inside `message`. Cloud Run groups an error by
             # its message, and a traceback on its own line would be a separate entry.

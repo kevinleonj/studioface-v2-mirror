@@ -201,7 +201,9 @@ def test_tests_that_scan_product_source_strip_comments_first():
         # scripts/check_ad_copy.py and scripts/check_ad_claims.py as subprocesses
         # rather than reading their source.
         "test_check_ad_copy.py",
-        "test_check_ad_claims.py",
+        # Renamed from test_check_ad_claims.py in task 33 — this is the check command's
+        # own name for the file (work/queue/33...), and the reason above still holds.
+        "test_ad_claims.py",
     }
     sources = re.compile(r'"(?:app|scripts|frontend)"|/\s*"src"|"(?:tsx|py)"')
     offenders = []

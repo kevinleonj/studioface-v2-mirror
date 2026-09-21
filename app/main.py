@@ -567,7 +567,8 @@ def _register_recovery(app: FastAPI, d: Deps) -> None:
             if order.status != "delivered":
                 continue
             token = delivery_token(order.id, d.pipeline.secret)
-            d.pipeline.send_email(order.email, f"{d.gallery_base}?o={order.id}&t={token}")
+            # Fragment, not a query: see GALLERY_BASE's comment in app/core.py.
+            d.pipeline.send_email(order.email, f"{d.gallery_base}#o={order.id}&t={token}")
         # Always the same answer: a different one would reveal whether this address
         # ever bought anything.
         return {"sent": True}
@@ -610,7 +611,11 @@ def _register_thanks(app: FastAPI, d: Deps) -> None:
         without asking Stripe anything. Measured 19 Sep:
 
             GET /api/gracias?session_id=cs_test_fake
-            302 -> /g/?o=cs_test_fake&t=REDACTED
+            302 -> /g/#o=cs_test_fake&t=REDACTED
+
+        (Task 31: the redirect now carries the fragment shape, never a query — see
+        GALLERY_BASE's comment in app/core.py. This docstring is not re-verified from
+        outside every run, so the literal token above is only an example.)
 
         Since `delivery_token` is what gates /api/orders, the route was a token-minting
         oracle for the whole order namespace: supply an id, receive its token. The old
@@ -649,7 +654,7 @@ def _register_thanks(app: FastAPI, d: Deps) -> None:
             if d.pipeline.store.get(session_id) is None:
                 return _paid_but_broken()
         token = delivery_token(session_id, d.pipeline.secret)
-        return RedirectResponse(f"{d.gallery_base}?o={session_id}&t={token}", status_code=302)
+        return RedirectResponse(f"{d.gallery_base}#o={session_id}&t={token}", status_code=302)
 
 
 def _download_url(d: Deps, uri: str, n: int) -> str:
@@ -659,6 +664,41 @@ def _download_url(d: Deps, uri: str, n: int) -> str:
     except TypeError:
         # A one-argument signer: keep today's behaviour rather than failing the gallery.
         return d.sign_url(uri)
+
+
+def _order_status_payload(d: Deps, order_id: str, token: str) -> dict:
+    """Shared by both order-status routes below. Never logs `order_id` or `token`:
+    whoever can read a log line carrying either can open this customer's gallery
+    (app/logs.py's own rule; tests/test_log_ids.py enforces it for every logger call
+    in app/, and this function adds none)."""
+    if not hmac.compare_digest(token, delivery_token(order_id, d.pipeline.secret)):
+        raise HTTPException(404)
+    order = d.pipeline.store.get(order_id)
+    if order is None:
+        # This used to answer `pending`, so somebody who never paid saw an endless
+        # pending gallery (measured 19 Sep, with a token /api/gracias handed out for
+        # free). The route now says what is true: there is no such order.
+        #
+        # Stripe still redirects the browser BEFORE it delivers the webhook, so a
+        # genuine buyer can meet this 404 for a few seconds. That race is absorbed by
+        # the client, which polls through 404s for a bounded window - see
+        # NOTFOUND_GRACE_MS in frontend/src/app/g/page.tsx. Writing a placeholder
+        # order here instead would race the webhook for the same document and could
+        # overwrite a `generating` order with a fresh `paid` one, which is far worse
+        # than a few seconds of spinner.
+        raise HTTPException(404)
+    # Signed only on delivery: the objects are private, the links live 15 minutes,
+    # and signing earlier would hand out URLs for objects that do not exist yet.
+    delivered = order.status == "delivered"
+    images = [d.sign_url(u) for u in order.outputs] if delivered else []
+    # F3. A second address per image, signed to be SAVED rather than displayed.
+    # `attachment` tells the browser not to render, so it cannot be the same address
+    # the gallery shows - and a signer that takes one argument (every existing test
+    # double) degrades to today's behaviour instead of crashing.
+    downloads = (
+        [_download_url(d, u, i) for i, u in enumerate(order.outputs, 1)] if delivered else []
+    )
+    return {"status": order.status, "images": images, "downloads": downloads}
 
 
 def _register_public(app: FastAPI, d: Deps) -> None:
@@ -679,36 +719,20 @@ def _register_public(app: FastAPI, d: Deps) -> None:
         event = await request.json()
         return _handle_event(d, event)
 
+    @app.get("/api/orders/{order_id}")
+    def status_by_header(order_id: str, x_gallery_token: str = Header(default="")):
+        """Task 31's new shape: the key travels in a request header, never the
+        address, so it can never reach an access log or an analytics request that
+        watches the page's URL. This is the only shape the current frontend
+        (frontend/src/app/g/page.tsx) ever calls."""
+        return _order_status_payload(d, order_id, x_gallery_token)
+
     @app.get("/api/orders/{order_id}/{token}")
     def status(order_id: str, token: str):
-        if not hmac.compare_digest(token, delivery_token(order_id, d.pipeline.secret)):
-            raise HTTPException(404)
-        order = d.pipeline.store.get(order_id)
-        if order is None:
-            # This used to answer `pending`, so somebody who never paid saw an endless
-            # pending gallery (measured 19 Sep, with a token /api/gracias handed out for
-            # free). The route now says what is true: there is no such order.
-            #
-            # Stripe still redirects the browser BEFORE it delivers the webhook, so a
-            # genuine buyer can meet this 404 for a few seconds. That race is absorbed by
-            # the client, which polls through 404s for a bounded window - see
-            # NOTFOUND_GRACE_MS in frontend/src/app/g/page.tsx. Writing a placeholder
-            # order here instead would race the webhook for the same document and could
-            # overwrite a `generating` order with a fresh `paid` one, which is far worse
-            # than a few seconds of spinner.
-            raise HTTPException(404)
-        # Signed only on delivery: the objects are private, the links live 15 minutes,
-        # and signing earlier would hand out URLs for objects that do not exist yet.
-        delivered = order.status == "delivered"
-        images = [d.sign_url(u) for u in order.outputs] if delivered else []
-        # F3. A second address per image, signed to be SAVED rather than displayed.
-        # `attachment` tells the browser not to render, so it cannot be the same address
-        # the gallery shows - and a signer that takes one argument (every existing test
-        # double) degrades to today's behaviour instead of crashing.
-        downloads = (
-            [_download_url(d, u, i) for i, u in enumerate(order.outputs, 1)] if delivered else []
-        )
-        return {"status": order.status, "images": images, "downloads": downloads}
+        """The old shape, with the key in the path. Kept only for links already sent
+        to a customer's inbox before task 31 - nothing in this codebase produces this
+        shape any more; see status_by_header above."""
+        return _order_status_payload(d, order_id, token)
 
 
 def _register_internal(app: FastAPI, d: Deps) -> None:

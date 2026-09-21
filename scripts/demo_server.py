@@ -103,7 +103,9 @@ def main() -> None:
     if not static_dir.is_dir():
         raise SystemExit(f"build the frontend first: no {static_dir}")
     token = delivery_token(DEMO_ORDER, TOKEN_SECRET)
-    print(f"gallery: http://127.0.0.1:{port}/g/?o={DEMO_ORDER}&t={token}")
+    # Fragment, matching what the real redirect and emails produce (task 31) — a
+    # fragment is never sent to any server, so it never reaches this demo's own logs.
+    print(f"gallery: http://127.0.0.1:{port}/g/#o={DEMO_ORDER}&t={token}")
     uvicorn.run(build_demo_app(static_dir), host="127.0.0.1", port=port, log_level="warning")
 
 
