@@ -661,3 +661,187 @@ def test_old_shape_gallery_link_is_rewritten_before_analytics_and_leaks_no_key(p
             f"the address bar still carried the query shape when a reporting hit "
             f"left: {address_bar_at_the_time} -> {url}"
         )
+
+
+# ---------------------------------------------------------------- task 55
+#
+# reload-keeps-the-sale (docs/audit/limit-path-2026-09-22.md). WHY: a person in a real
+# browser, 22 September 2026, reached the free-preview limit and saw the sentence and
+# an enabled buy button — that half already worked. He then reloaded. The re-sign call
+# went out and no new preview was asked for, so the server still had his photos and
+# said so. But the page forgot: the buy button rendered disabled, the dropzone had
+# reverted to "Sube de 1 a 4 selfies", there were zero thumbnails, and the limit
+# sentence was gone. The server was right; the page was wrong.
+
+RELOAD_LIMITED_HANDLE = {
+    "preview_url": None,
+    "batch": "edges-test-batch-reload-limited",
+    "n": 2,
+    "t": "edges-test-signature-reload-limited",
+    "wardrobe": "",
+    "limited": True,
+}
+
+
+def fake_resign_no_picture(page) -> dict:
+    """Answers GET /api/preview/{batch} the way the real server does for a
+    STORE-ONLY batch (app/main.py's `resign_preview`): `d.resign_preview(batch)`
+    finds no generated result to sign and the route answers 404, never a 200 with a
+    null body. `resignPreview` in upload-form.tsx already treats any non-200 as
+    "no picture" — this proves that path, not a shape this server would never send."""
+    calls = {"count": 0}
+
+    def handler(route):
+        calls["count"] += 1
+        route.fulfill(status=404, json={"detail": "Not Found"})
+
+    page.route("**/api/preview/*", handler)
+    return calls
+
+
+def fake_checkout(page) -> dict:
+    """Answers POST /api/checkout entirely inside the browser, capturing the body it
+    was sent so a test can prove which batch the buy button actually sold — the
+    stored one the handle names, not an empty one and not a freshly minted one.
+    Answers with a URL on the loopback origin itself, carrying the sold batch in its
+    own query string as a second, independent check of the same fact, so pressing
+    buy can navigate all the way through without a real Stripe involved."""
+    sold: dict = {}
+
+    def handler(route):
+        body = route.request.post_data_json or {}
+        sold.update(body)
+        route.fulfill(
+            status=200,
+            json={"url": f"{BASE}/?checkout_ok=1&batch={body.get('batch')}"},
+        )
+
+    page.route("**/api/checkout", handler)
+    return sold
+
+
+def test_reload_at_the_limit_keeps_the_sentence_the_count_and_a_working_buy_button(page):
+    from playwright.sync_api import expect
+
+    open_app(page)
+    choose(page, FACE, FACE2)
+    fake_preview(page, RELOAD_LIMITED_HANDLE)
+    page.get_by_role("button", name="Ver una prueba gratis").click()
+
+    limit_sentence = page.get_by_text(
+        "Has usado tus pruebas gratis de esta hora. Puedes comprar tus cuatro "
+        "fotos ahora o volver dentro de una hora."
+    )
+    expect(limit_sentence).to_be_visible()
+    buy = page.get_by_role("button", name="Comprar las cuatro fotos por 19,99 €")
+    assert buy.is_visible() and buy.is_enabled(), "the limit path already worked before this task"
+
+    resign_calls = fake_resign_no_picture(page)
+    generation_calls = {"count": 0}
+
+    def refuse_a_new_generation(route):
+        # A reload must never re-ask POST /api/preview at all — this route is
+        # `**/api/preview` exactly, never `**/api/preview/{batch}` (fake_resign_no_
+        # picture's own route, above), so the two cannot be confused with each other.
+        generation_calls["count"] += 1
+        route.fulfill(status=200, json=RELOAD_LIMITED_HANDLE)
+
+    page.route("**/api/preview", refuse_a_new_generation)
+
+    page.reload(wait_until="load")
+
+    # THE FIX, asserted piece by piece: the sentence, the count, and the button.
+    expect(limit_sentence).to_be_visible()
+    expect(
+        page.get_by_text(f"Tus fotos siguen guardadas ({RELOAD_LIMITED_HANDLE['n']} fotos).")
+    ).to_be_visible()
+    assert page.get_by_text("2 de 4 elegidas").is_visible()
+    assert page.get_by_text("Añadir más fotos").is_visible()
+    assert thumbs_locator(page).count() == 0, (
+        "the photos are not in this browser after a reload; nothing is faked"
+    )
+    assert page.locator("img[alt='Prueba gratuita de tu foto de perfil']").count() == 0
+
+    buy = page.get_by_role("button", name="Comprar las cuatro fotos por 19,99 €")
+    assert buy.is_visible(), "the buy button must survive a reload at the limit"
+    assert buy.is_enabled(), "a stored handle is a real handle after a reload too"
+
+    assert resign_calls["count"] == 1, "one re-sign call, exactly what production measured"
+    assert generation_calls["count"] == 0, "a reload must never spend one of the free tries"
+
+    sold = fake_checkout(page)
+    buy.click()
+    page.wait_for_url(lambda url: "checkout_ok=1" in url, timeout=15_000)
+    assert sold.get("batch") == RELOAD_LIMITED_HANDLE["batch"], (
+        "the buy button must sell the STORED batch the handle named, not an empty "
+        "set and not a new one"
+    )
+    assert sold.get("n") == RELOAD_LIMITED_HANDLE["n"]
+    assert sold.get("t") == RELOAD_LIMITED_HANDLE["t"]
+
+
+def test_removing_every_photo_still_refuses_to_sell_after_a_reload(page):
+    """The guard task 34 added (test_buy_button_will_not_sell_an_empty_set, above)
+    must keep working even once a restored handle is in play: once the visitor has
+    actually engaged with the dropzone and brought it back down to zero themselves,
+    that is a real empty set again, not the phantom count a reload leaves behind."""
+    open_app(page)
+    choose(page, FACE, FACE2)
+    fake_preview(page, RELOAD_LIMITED_HANDLE)
+    page.get_by_role("button", name="Ver una prueba gratis").click()
+    buy = page.get_by_role("button", name="Comprar las cuatro fotos por 19,99 €")
+    assert buy.is_enabled()
+
+    fake_resign_no_picture(page)
+    page.reload(wait_until="load")
+
+    buy = page.get_by_role("button", name="Comprar las cuatro fotos por 19,99 €")
+    assert buy.is_enabled(), "restored, untouched: the stored batch is real photos"
+
+    choose(page, FACE)  # a real, local pick now exists
+    expect_thumb_count(page, 1)
+    page.get_by_label("Quitar foto 1").click()
+    expect_thumb_count(page, 0)
+
+    buy = page.get_by_role("button", name="Comprar las cuatro fotos por 19,99 €")
+    assert buy.is_disabled(), (
+        "once the visitor has genuinely emptied the dropzone themselves, task 34's "
+        "guard must still refuse to sell an empty set"
+    )
+
+
+def test_generar_una_prueba_nueva_generates_immediately(page):
+    """Task 55. THE BUG THIS REPLACES: this button used to clear the handle and drop
+    back to the initial "Ver una prueba gratis" screen, costing the visitor an extra
+    click and a second empty-looking wait. It must fire a new preview right away."""
+    from playwright.sync_api import expect
+
+    open_app(page)
+    choose(page, FACE)
+    generation_calls = {"count": 0}
+
+    def handle_generation(route):
+        generation_calls["count"] += 1
+        route.fulfill(status=200, json=FAKE_HANDLE)
+
+    page.route("**/api/preview", handle_generation)
+    page.get_by_role("button", name="Ver una prueba gratis").click()
+    page.wait_for_selector("img[alt='Prueba gratuita de tu foto de perfil']")
+    assert generation_calls["count"] == 1
+
+    choose(page, FACE2)  # picking again shows the "changed photos" panel
+    changed_notice = page.get_by_text(
+        "Has cambiado las fotos. Puedes generar una prueba nueva o comprar con las fotos actuales."
+    )
+    expect(changed_notice).to_be_visible()
+
+    page.get_by_role("button", name="Generar una prueba nueva").click()
+
+    # A second generation fired immediately — proven by the notice clearing once the
+    # new handle matches the current files again — never a return to the initial,
+    # empty "Ver una prueba gratis" screen.
+    expect(changed_notice).to_be_hidden()
+    assert generation_calls["count"] == 2, (
+        "must call preview immediately, not just reset to the initial state"
+    )
+    assert page.get_by_role("button", name="Comprar las cuatro fotos por 19,99 €").is_visible()

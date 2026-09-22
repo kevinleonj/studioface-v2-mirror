@@ -76,6 +76,14 @@ export const metadata: Metadata = {
 // No aggregateRating and no FAQPage here, by the brief: neither claim is backed by a
 // real review count or a machine-readable FAQ, and an unbacked one is the kind of rich
 // result Google's own spam policies act on.
+// Task 52: hasMerchantReturnPolicy references the policy node declared once, on
+// /legal/terminos/#devoluciones (nested under Organization there, the way Google's
+// merchant-listing page recommends), by "@id" rather than repeating it here. No
+// shippingDetails — there is no shipping, and a zero-cost zero-day shipping block
+// would be a false statement about a service delivered by email. See
+// docs/DECISIONS.md and docs/verified.md for both decisions and their sources.
+const RETURN_POLICY_ID = `${SITE_URL}/legal/terminos/#devoluciones`;
+
 const PRODUCT_LD = {
   "@context": "https://schema.org",
   "@type": "Product",
@@ -89,6 +97,7 @@ const PRODUCT_LD = {
     priceCurrency: "EUR",
     price: PRICE_EUR.toFixed(2),
     availability: "https://schema.org/InStock",
+    hasMerchantReturnPolicy: { "@id": RETURN_POLICY_ID },
   },
 };
 

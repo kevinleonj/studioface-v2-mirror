@@ -29,6 +29,13 @@ import { PRICE_EUR, PRICE_LABEL, SITE_URL, TURNSTILE_SITEKEY } from "@/lib/confi
 // Same shape as the home page's PRODUCT_LD/ORGANIZATION_LD (page.tsx), built once here
 // so the two ad pages get identical structured data wiring rather than two copies of
 // the object literal.
+//
+// Task 52: hasMerchantReturnPolicy references the one policy node declared on
+// /legal/terminos/#devoluciones (nested under Organization there) by "@id", same as
+// the home page. No shippingDetails — there is no shipping. See docs/DECISIONS.md and
+// docs/verified.md.
+const RETURN_POLICY_ID = `${SITE_URL}/legal/terminos/#devoluciones`;
+
 function productLd(content: AdPageContent) {
   return {
     "@context": "https://schema.org",
@@ -43,6 +50,7 @@ function productLd(content: AdPageContent) {
       priceCurrency: "EUR",
       price: PRICE_EUR.toFixed(2),
       availability: "https://schema.org/InStock",
+      hasMerchantReturnPolicy: { "@id": RETURN_POLICY_ID },
     },
   };
 }

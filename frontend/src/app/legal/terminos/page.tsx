@@ -1,6 +1,34 @@
 import { H2, LegalPage } from "@/components/legal-page";
+import { SITE_URL } from "@/lib/config";
 
 export const metadata = { title: "Términos — StudioFace" };
+
+// Task 52 (structured-data-tells-the-truth). Google's merchant-listing page
+// recommends nesting MerchantReturnPolicy under the Organization type, so it lives
+// here, on the page that states the policy in prose, not on the Product pages that
+// merely point at it by "@id". The text matches what this page actually says, two
+// paragraphs below: custom digital content, the right of withdrawal lost once the
+// images are delivered (artículo 103.m, Real Decreto Legislativo 1/2007), and — kept
+// out of this node because it is not a return, it is a refund on non-delivery — the
+// separate automatic full refund when the four images cannot be produced.
+// returnPolicyCategory is MerchantReturnNotPermitted: no returnable window is
+// invented, because none exists. merchantReturnLink points at #devoluciones, the id
+// on the "Derecho de desistimiento" heading directly below, so the fragment is real.
+const RETURN_POLICY_ID = `${SITE_URL}/legal/terminos/#devoluciones`;
+
+const ORGANIZATION_RETURN_POLICY_LD = {
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  name: "StudioFace",
+  url: SITE_URL,
+  hasMerchantReturnPolicy: {
+    "@type": "MerchantReturnPolicy",
+    "@id": RETURN_POLICY_ID,
+    applicableCountry: "ES",
+    returnPolicyCategory: "https://schema.org/MerchantReturnNotPermitted",
+    merchantReturnLink: RETURN_POLICY_ID,
+  },
+};
 
 export default function Page() {
   return (
@@ -16,7 +44,7 @@ export default function Page() {
         Stripe. Recibirás el enlace a tus imágenes por correo electrónico, normalmente en unos
         minutos.
       </p>
-      <H2>Derecho de desistimiento</H2>
+      <H2 id="devoluciones">Derecho de desistimiento</H2>
       <p>
         Se trata de contenido digital generado a medida. Al confirmar el pago aceptas que la
         ejecución comience de inmediato y reconoces que, una vez entregadas las imágenes, pierdes
@@ -37,6 +65,10 @@ export default function Page() {
       <p>
         limeralda, NIF Z3714124-C, Maria de Molina 31, Madrid. hola@studioface.app.
       </p>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(ORGANIZATION_RETURN_POLICY_LD) }}
+      />
     </LegalPage>
   );
 }

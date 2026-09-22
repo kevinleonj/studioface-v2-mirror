@@ -166,6 +166,47 @@ def stripe_mode_reported() -> list[str]:
     )
 
 
+RETURN_POLICY_ID = f"{BASE}/legal/terminos/#devoluciones"
+
+
+def return_policy() -> list[str]:
+    """Task 52. Google's free-listings policy excludes StudioFace outright (it sells
+    generated images delivered by email, not a tangible product), so this never earns
+    a merchant listing whatever the markup says — but one of the two Search Console
+    warnings (missing hasMerchantReturnPolicy) can be answered honestly. The other
+    (missing shippingDetails) is deliberately left unanswered: there is no shipping.
+
+    Reads /legal/terminos/ and one Product page (/) from outside, the same as every
+    other check here, and verifies: the terms page carries a MerchantReturnPolicy
+    node nested under Organization with the #devoluciones @id and returnPolicyCategory
+    MerchantReturnNotPermitted (no invented returnable window), that the #devoluciones
+    anchor actually exists on the page, and that the Product page's offer references
+    that same @id rather than repeating or inventing a policy of its own."""
+    _, terms_html = get("/legal/terminos/")
+    _, product_html = get("/")
+    id_pattern = r'"@id"\s*:\s*"' + re.escape(RETURN_POLICY_ID) + r'"'
+    category_pattern = (
+        r'"returnPolicyCategory"\s*:\s*"https://schema\.org/MerchantReturnNotPermitted"'
+    )
+    wanted_on_terms = {
+        "a MerchantReturnPolicy node with the #devoluciones @id": re.compile(id_pattern),
+        "returnPolicyCategory MerchantReturnNotPermitted (no invented return window)": re.compile(
+            category_pattern
+        ),
+        "the #devoluciones anchor on the visible page": re.compile(r'id="devoluciones"'),
+    }
+    problems = [
+        f"terms page lacks {name}"
+        for name, pattern in wanted_on_terms.items()
+        if not pattern.search(terms_html)
+    ]
+    offer_reference = re.compile(r'"hasMerchantReturnPolicy"\s*:\s*\{\s*' + id_pattern + r"\s*\}")
+    problems += ["home page's Product offer does not reference the return policy by @id"] * (
+        not offer_reference.search(product_html)
+    )
+    return problems
+
+
 def stripe_live() -> list[str]:
     """Task 21: stripe_mode alone was green BEFORE the live switch, because a live key
     and a still-test price both leave stripe_mode == 'live' — the key's prefix says
@@ -190,6 +231,7 @@ CHECKS = {
     "head": head,
     "attribution": attribution,
     "gallery_hidden": gallery_hidden,
+    "return_policy": return_policy,
 }
 
 

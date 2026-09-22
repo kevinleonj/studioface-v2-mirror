@@ -204,6 +204,10 @@ def test_tests_that_scan_product_source_strip_comments_first():
         # Renamed from test_check_ad_claims.py in task 33 — this is the check command's
         # own name for the file (work/queue/33...), and the reason above still holds.
         "test_ad_claims.py",
+        # Task 52. Reads built export HTML (frontend/out) only, same reason as
+        # test_legal_identity.py and test_ad_landing_pages.py above: rendered HTML
+        # carries no source comments to strip.
+        "test_return_policy.py",
     }
     sources = re.compile(r'"(?:app|scripts|frontend)"|/\s*"src"|"(?:tsx|py)"')
     offenders = []

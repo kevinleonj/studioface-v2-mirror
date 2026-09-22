@@ -49,7 +49,16 @@ type Handle = {
  */
 const HANDLE_STORAGE_KEY = "sf_preview_handle";
 
-type StoredHandle = { batch: string; n: number; t: string; wardrobe?: string };
+type StoredHandle = {
+  batch: string;
+  n: number;
+  t: string;
+  wardrobe?: string;
+  // Task 55, reload-keeps-the-sale. Without this, a reload restored batch/n/t but
+  // not whether the free previews for the hour were spent, so a visitor reloading
+  // at the limit saw no limit sentence at all — see docs/audit/limit-path-2026-09-22.md.
+  limited?: boolean;
+};
 
 function readStoredHandle(): StoredHandle | null {
   try {
@@ -68,6 +77,7 @@ function readStoredHandle(): StoredHandle | null {
         n: parsed.n,
         t: parsed.t,
         wardrobe: typeof parsed.wardrobe === "string" ? parsed.wardrobe : undefined,
+        limited: typeof parsed.limited === "boolean" ? parsed.limited : undefined,
       };
     }
     return null;
@@ -453,6 +463,14 @@ export function UploadForm() {
   // a later pick or removal has left the visitor looking at a different set of
   // photos than the one behind the preview they are looking at.
   const [previewedFiles, setPreviewedFiles] = useState<File[]>([]);
+  // Task 55, reload-keeps-the-sale. The server holds the photos after a reload; the
+  // browser does not, and never fakes thumbnails for files it does not have. This is
+  // the ONLY count the dropzone and the buy button can trust while `files` is still
+  // empty right after a restore — set once, from the stored handle's own `n`, and
+  // cleared the moment the visitor actually picks a photo (below), so it never
+  // papers over the real "removed every photo" guard task 34 added (`files.length
+  // === 0` genuinely means nothing is kept once this is null again).
+  const [restoredCount, setRestoredCount] = useState<number | null>(null);
   // F5. Focus lands here once the preview has decoded.
   const buyButton = useRef<HTMLButtonElement>(null);
   // F1. The widget id from render(), and a poll handle so a refresh in flight can be
@@ -481,6 +499,14 @@ export function UploadForm() {
         if (thumb.url) URL.revokeObjectURL(thumb.url);
       });
     };
+  }, [files]);
+
+  // Task 55, reload-keeps-the-sale. The instant the visitor actually picks a photo,
+  // `files` is the truth again and the phantom count from a restore must stop being
+  // consulted — including on a later removal back down to zero, which is task 34's
+  // guard and must stay a real refusal, not a fallback to a stale stored count.
+  useEffect(() => {
+    if (files.length > 0) setRestoredCount(null);
   }, [files]);
 
   /**
@@ -649,8 +675,13 @@ export function UploadForm() {
         t: stored.t,
         wardrobe: stored.wardrobe,
         preview_url,
+        limited: stored.limited,
       });
       setPreviewWardrobe(stored.wardrobe ?? "");
+      // Task 55. The server holds `stored.n` photos; this tab holds none of the
+      // bytes. Set once here, consulted by the dropzone and the buy button below
+      // until a real pick (the effect above) replaces it with the truth.
+      setRestoredCount(stored.n);
     });
     return () => {
       cancelled = true;
@@ -672,6 +703,7 @@ export function UploadForm() {
       n: handle.n,
       t: handle.t,
       wardrobe: handle.wardrobe,
+      limited: handle.limited,
     });
   }, [handle]);
 
@@ -737,7 +769,11 @@ export function UploadForm() {
     // below), but there is nothing left to sell — app/guards.py's validate_uploads
     // would refuse 0 files as `upload_count:0` anyway; this is the client-side half
     // of that same refusal, never offering the click in the first place.
-    if (!handle || files.length === 0) return;
+    //
+    // Task 55, reload-keeps-the-sale. `restoredCount` is the one exception: it means
+    // the server, not an empty `files`, is the source of truth for what is being
+    // sold — a reload with a stored handle, never touched locally.
+    if (!handle || (files.length === 0 && restoredCount === null)) return;
     setBusy(true);
     setError("");
     // Task 27/29. The buy button must sell what the visitor is currently looking at,
@@ -820,7 +856,7 @@ export function UploadForm() {
     } finally {
       setBusy(false);
     }
-  }, [handle, wardrobe, files, previewedFiles, refreshChallenge]);
+  }, [handle, wardrobe, files, previewedFiles, restoredCount, refreshChallenge]);
 
   const removePhoto = useCallback((index: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== index));
@@ -830,6 +866,14 @@ export function UploadForm() {
   // as long as the widget is loading, refreshing, or has failed. When Turnstile is
   // not configured at all (TURNSTILE_SITEKEY empty), there is nothing to wait for.
   const notReady = TURNSTILE_SITEKEY !== "" && challenge !== "ready";
+
+  // Task 55, reload-keeps-the-sale. What the dropzone tells the visitor how many
+  // photos it is holding: the real, local `files` once any exist, otherwise the
+  // count a restored handle says the server is holding, otherwise none.
+  const dropzoneCount = files.length > 0 ? files.length : (restoredCount ?? 0);
+  // Same distinction the buy button's own guard needs (see checkout() above): a
+  // restored handle with no local files is real photos, not an empty set.
+  const hasSomethingToSell = files.length > 0 || restoredCount !== null;
 
   return (
     <div className="flex flex-col gap-4">
@@ -843,21 +887,25 @@ export function UploadForm() {
         className="sf-frame block cursor-pointer border border-dashed border-[color:var(--border)] px-4 py-8 text-center hover:border-[color:var(--primary)] hover:bg-[color:var(--secondary)] has-[:focus-visible]:border-[color:var(--primary)]"
       >
         <span className="text-sm text-[color:var(--muted-foreground)]">
-          {files.length === 0
+          {dropzoneCount === 0
             ? "Paso 01"
-            : `${files.length} de ${MAX_FILES} elegidas`}
+            : `${dropzoneCount} de ${MAX_FILES} elegidas`}
         </span>
         <span className="mt-[var(--s2)] block text-base font-medium">
-          {files.length === 0
+          {dropzoneCount === 0
             ? `Sube de 1 a ${MAX_FILES} selfies`
-            : files.length < MAX_FILES
+            : dropzoneCount < MAX_FILES
               ? "Añadir más fotos"
               : "Elegir otras fotos"}
         </span>
         <span className="mt-[var(--s1)] block text-sm text-[color:var(--muted-foreground)]">
-          {files.length === 0
-            ? "JPG, PNG, WEBP o HEIC. Máximo 12 MB cada una."
-            : files.map((f) => f.name).join(" · ")}
+          {files.length > 0
+            ? files.map((f) => f.name).join(" · ")
+            : restoredCount !== null
+              ? // Task 55. The server holds these, this tab does not — no file name
+                // to show, so it says what it actually knows instead of faking one.
+                `${restoredCount} ${restoredCount === 1 ? "foto guardada" : "fotos guardadas"}.`
+              : "JPG, PNG, WEBP o HEIC. Máximo 12 MB cada una."}
         </span>
         {thumbs.length > 0 ? (
           <div
@@ -993,13 +1041,15 @@ export function UploadForm() {
               <Button
                 size="lg"
                 variant="outline"
-                onClick={() => {
-                  setHandle(null);
-                  setPreviewedFiles([]);
-                  setPreviewBroken(false);
-                  // O1: same reason "Volver a intentarlo" resets the token below.
-                  refreshChallenge();
-                }}
+                // Task 55, reload-keeps-the-sale. THE BUG THIS REPLACES: this used
+                // to clear the handle and drop back to the initial "Ver una prueba
+                // gratis" state, costing the visitor an extra click and a second
+                // empty-looking screen. `preview()` already does everything that
+                // reset used to (setPreviewBroken(false), refreshChallenge() in its
+                // own finally) — this fires it immediately instead, with the photos
+                // currently kept.
+                disabled={busy || notReady}
+                onClick={preview}
               >
                 Generar una prueba nueva
               </Button>
@@ -1010,12 +1060,23 @@ export function UploadForm() {
             // real and /api/checkout accepts it: the clothing selector and the buy
             // button below are the "normal" ones, not a special-cased pair. Says only
             // what the terms already promise — a purchase now, or a return in an hour.
-            <p
-              role="status"
-              className="text-sm text-[color:var(--foreground)]"
-            >
-              {LIMITED_MESSAGE}
-            </p>
+            <div className="flex flex-col gap-[var(--s1)]">
+              <p role="status" className="text-sm text-[color:var(--foreground)]">
+                {LIMITED_MESSAGE}
+              </p>
+              {/* Task 55, reload-keeps-the-sale. A limited handle never has a
+                  picture, and after a reload there are no thumbnails either — the
+                  dropzone above already says how many, but nothing here said the
+                  photos themselves were still there until this line. */}
+              {handle.preview_url === null && files.length === 0 ? (
+                <p
+                  role="status"
+                  className="text-sm text-[color:var(--muted-foreground)]"
+                >
+                  {`Tus fotos siguen guardadas (${handle.n} ${handle.n === 1 ? "foto" : "fotos"}).`}
+                </p>
+              ) : null}
+            </div>
           ) : handle.preview_url === null ? null : previewBroken ? (
             <div
               role="alert"
@@ -1107,7 +1168,14 @@ export function UploadForm() {
               // who removes every kept photo still holds a signed handle from an
               // earlier preview — so this must check `files.length` too, not just
               // `busy`, the same way the free-preview button below already does.
-              disabled={busy || files.length === 0}
+              //
+              // Task 55, reload-keeps-the-sale. THE BUG THIS REPLACES: `files.length
+              // === 0` was also true right after a reload, before the visitor had
+              // touched anything, because the server holds the photos and this tab
+              // never did — so a real, valid, stored handle rendered a dead button.
+              // `!hasSomethingToSell` keeps task 34's refusal for a genuine "removed
+              // every photo" while recognising a restored handle as real photos.
+              disabled={busy || !hasSomethingToSell}
               onClick={checkout}
             >
               Comprar las cuatro fotos por {PRICE_LABEL}

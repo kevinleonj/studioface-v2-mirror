@@ -9,6 +9,7 @@ comments or a marker anywhere in its source.
 from __future__ import annotations
 
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -19,6 +20,36 @@ HOOK = ROOT / ".githooks" / "pre-push"
 
 GREEN_CI = "import sys\nsys.exit(0)\n"
 RED_CI = "import sys\nsys.exit(1)\n"
+
+
+def _sh() -> str:
+    """The POSIX shell that runs `.githooks/pre-push`, resolved the way this
+    project resolves every Windows executable (scripts/_exec.py's own rule) rather
+    than assumed to be on PATH.
+
+    Git for Windows ships `sh.exe` under `<install>\\usr\\bin`, a folder its own
+    installer does NOT always add to PATH — only `<install>\\cmd`, which holds
+    `git.exe`, is guaranteed. A terminal that started as Git Bash prepends
+    `usr\\bin` itself, so `sh` resolves there without help; a plain Windows Python
+    process launched some other way may not have it, and `subprocess.run(["sh",
+    ...])` then raises WinError 2 - found the hard way, 22 Sep 2026, when this
+    file passed from an interactive Git Bash shell all night but failed under the
+    stop hook's own process. `shutil.which` is tried first; if that fails, `git`
+    itself is resolved (always on PATH, `git.exe` alone is the guarantee) and
+    `sh.exe` is found next to it at the layout Git for Windows always uses.
+    """
+    found = shutil.which("sh")
+    if found:
+        return found
+    git = shutil.which("git")
+    if git:
+        candidate = Path(git).resolve().parent.parent / "usr" / "bin" / "sh.exe"
+        if candidate.is_file():
+            return str(candidate)
+    raise FileNotFoundError(
+        "no POSIX shell found: 'sh' is not on PATH and no sh.exe sits next to git.exe "
+        "at the Git-for-Windows layout"
+    )
 
 
 def _sanitized_git_env() -> dict[str, str]:
@@ -72,7 +103,7 @@ def _run_hook(repo: Path, *, skip_gate: str | None) -> subprocess.CompletedProce
     if skip_gate is not None:
         env["SF_SKIP_GATE"] = skip_gate
     return subprocess.run(
-        ["sh", str(HOOK)],
+        [_sh(), str(HOOK)],
         cwd=repo,
         env=env,
         capture_output=True,

@@ -4831,3 +4831,206 @@ any campaign exists (task 46).
 
 fal balance across this run: 4.5456 -> 4.4856, six cents, spent entirely by the closing
 browser test of the shop (the retry-after-reset case). Task 45 spent nothing.
+
+## 22 September 2026 (later still) — task 55, reload-keeps-the-sale
+
+docs/audit/limit-path-2026-09-22.md: Kevin, by hand, in a real browser, reached the
+free-preview limit on production (three previews, then a fourth that stored the photos
+and showed the limit sentence with an enabled buy button -- that half already worked)
+and then reloaded. The re-sign call went out, no new preview was asked for, so the
+server still had his photos -- but the page forgot: the buy button rendered disabled,
+the dropzone had gone back to "Sube de 1 a 4 selfies", zero thumbnails, no picture, no
+limit sentence. The server was right, the page was wrong -- the same shape as the
+21 September defect where a visitor at the limit had no buy button at all.
+
+Root cause, `frontend/src/components/upload-form.tsx`: two separate gaps.
+
+1. The reload-restore effect never carried `limited` from the stored handle into the
+   restored one -- `StoredHandle` had no `limited` field, so it was silently dropped
+   on write and never came back on read. A restored handle from the free-preview limit
+   looked exactly like an ordinary one, so the limit sentence never rendered.
+2. The dropzone text and the buy button's `disabled` attribute both read `files.length`
+   directly. After a reload the server holds the photos but this tab holds none of the
+   bytes -- `files` is genuinely empty -- so both fell back to "nothing chosen":
+   "Sube de 1 a 4 selfies" and a dead buy button, even though a real, valid, signed
+   handle was sitting right there.
+
+Fix: `StoredHandle` now carries `limited`, written and read like the rest of the
+handle. A new `restoredCount` state, set once from the stored handle's own `n` on
+mount-restore and cleared the moment the visitor makes a real local pick (so it can
+never paper over task 34's "removed every photo" guard), is what the dropzone count
+and the buy button's `disabled` check consult instead of `files.length` alone --
+`hasSomethingToSell = files.length > 0 || restoredCount !== null`. A limited handle
+restored with no picture and no local files now also says "Tus fotos siguen guardadas
+(N fotos)." next to the limit sentence. `checkout()`'s own early-return guard got the
+same fix, so the buy button actually reaches `/api/checkout` with the stored
+batch/n/t, never an empty one and never a freshly minted one. Separately, "Generar una
+prueba nueva" (shown when the kept photos have changed since the last preview) used to
+just clear the handle and drop back to the initial "Ver una prueba gratis" screen --
+it now calls `preview()` directly, generating immediately.
+
+Failing test first, `tests/e2e/test_upload_edges.py`
+(`test_reload_at_the_limit_keeps_the_sentence_the_count_and_a_working_buy_button`,
+`test_removing_every_photo_still_refuses_to_sell_after_a_reload`,
+`test_generar_una_prueba_nueva_generates_immediately`): all three run against the real
+loopback server with the image model faked entirely inside the browser
+(`fake_preview`/`fake_resign_no_picture`/`fake_checkout`, the same route-interception
+technique every other test in this file already uses) -- confirmed red against the
+unmodified component (`git stash` on just that one file, the test file kept), then
+green after the fix, 3 failed -> 20 passed, with the pre-existing 17 in this file
+untouched throughout. The reload test also proves the buy button reaches
+`/api/checkout` with the exact stored batch/n/t by intercepting that request and
+reading its body -- not just that a click fired.
+
+Local checks (`C:\Users\KEVIN\dev\studioface-v2\.venv\Scripts\python.exe scripts\
+ci.py`, run from inside the `wt-55` worktree, which has no `.venv` of its own):
+
+    954 passed, 35 skipped, 2 warnings in 203.15s (pytest)
+    WORKFLOW LINT: ok (every workflow can run, every step is mirrored or cloud-only)
+    OK: all assets within limits
+    DESIGN AUDIT: 0 P0, 0 P1, 0 P2   PASS
+    SKIP docker build: docker is not on PATH
+    CI MIRROR GATE: green in 398s
+
+Then, separately, `scripts\run_upload_edges.py` (image model faked, never called for
+real, never touches Stripe, fal or Google Secret Manager): 20 passed in 137.54s.
+
+**Not changed:** colours, fonts, the first-screen layout, consent logic, the GA4 id,
+the four delivery prompts, payment provider, hosting, price, permissions in Google
+Cloud, the free-preview limit of three. No new dependency.
+
+**Merge blocked from here:** `main` is checked out in `C:\Users\KEVIN\dev\studioface-v2`,
+so this worktree cannot move it. Committed on `task/55-reload-keeps-the-sale` only.
+The orchestrator merges, pushes `origin main`, and watches the deploy; once live,
+`scripts\run_upload_edges.py` should be run once more against the deployed build as
+this task's own final check, matching the instruction that opened it.
+
+## 22 September 2026 (task 52) — structured-data-tells-the-truth
+
+Google Search Console emailed Kevin on 22 Sep: missing `hasMerchantReturnPolicy` and
+missing `shippingDetails` in the Product offers, both non-critical. Decision (already
+taken, from Google's own pages, recorded in `docs/DECISIONS.md` and `docs/verified.md`
+with today's date): StudioFace sells four generated images delivered by email, not a
+tangible product, so it is excluded from Google's free-listings program outright
+(support.google.com/merchants/answer/12077589, "Services: labor, time, effort,
+expertise, or actions, which do not result in ownership of a tangible product") —
+whatever the markup says, it can never earn a merchant listing. The Product markup
+stays because it still earns the ordinary product snippet with the price. Of the two
+warnings, one can be answered honestly and one cannot: `hasMerchantReturnPolicy` is
+added; `shippingDetails` is deliberately left out because there is no shipping and a
+zero-cost zero-day block would be a false statement about a service.
+
+What changed: `frontend/src/app/legal/terminos/page.tsx` now carries an `Organization`
+JSON-LD node with `hasMerchantReturnPolicy` (Google's own recommended nesting,
+developers.google.com/search/docs/appearance/structured-data/return-policy) —
+`applicableCountry: "ES"`, `returnPolicyCategory:
+"https://schema.org/MerchantReturnNotPermitted"` (no returnable window invented —
+Google's docs confirm `returnPolicyDays` is only required for the
+`MerchantReturnFiniteReturnWindow` category, so it is correctly absent here), `@id`
+and `merchantReturnLink` both set to
+`https://studioface.app/legal/terminos/#devoluciones`. That fragment is real: the
+"Derecho de desistimiento" heading (`frontend/src/components/legal-page.tsx`'s `H2`
+now takes an optional `id`) carries `id="devoluciones"`, immediately above the
+adjacent "Si algo sale mal" refund paragraph — the anchor lands on both clauses the
+policy actually rests on. Every Product's `offers` on `frontend/src/app/page.tsx`
+(home) and `frontend/src/components/ad-landing.tsx` (shared by `/foto-cv/` and
+`/foto-linkedin/`) now carries `"hasMerchantReturnPolicy": {"@id":
+"https://studioface.app/legal/terminos/#devoluciones"}` — a reference, not a
+repeated or invented policy. No `shippingDetails` anywhere.
+
+The return policy states exactly what the terms page already said, nothing invented:
+custom digital content, the right of withdrawal lost once the images are delivered
+under artículo 103.m of Real Decreto Legislativo 1/2007, and — kept out of the
+`MerchantReturnPolicy` node because it is a refund on non-delivery, not a return — the
+separate automatic full refund when the four images cannot be produced, stated one
+paragraph below in "Si algo sale mal".
+
+Failing test first, two files:
+- `tests/test_return_policy.py` (built-export test, same convention as
+  `tests/test_page_head.py`/`tests/test_legal_identity.py`): 6 failed / 4 passed
+  against the export built from the unmodified source (no Organization node on the
+  terms page, no offer reference, no `#devoluciones` anchor); 10 passed after the
+  frontend changes and a fresh `npm run build`.
+- `tests/test_return_policy_check.py` (unit test for the new `scripts/check.py`
+  `return_policy` guard, same convention as `tests/test_stripe_live_check.py`,
+  `check.get` monkeypatched so no network call is made): 4 failed with
+  `AttributeError: module 'check' has no attribute 'return_policy'` before the
+  function existed; 4 passed after, including the twin that must be refused (either
+  page missing the markup, or an offer @id that points at a node the terms page never
+  declares) and the twin that must get through (both pages carrying the finished
+  markup).
+
+`tests/test_source_scanners.py` needed one addition: `test_return_policy.py` reads
+built export HTML (`frontend/out`), which the repo's own comment-stripping rule
+requires either `strip_comments` or an entry in that test's `exempt` set — added,
+same reasoning already recorded there for `test_legal_identity.py` and
+`test_ad_landing_pages.py` (rendered HTML carries no source comments to strip).
+
+Local checks (`C:\Users\KEVIN\dev\studioface-v2\.venv\Scripts\python.exe scripts\
+ci.py`, run from inside `wt-52`, which has no `.venv` of its own; `frontend/`
+needed its own `npm install` first — worktrees do not share `node_modules`, no
+`package.json`/`package-lock.json` change):
+
+    968 passed, 35 skipped, 2 warnings in 103.90s (pytest, re-run standalone for the
+    exact count)
+    DESIGN AUDIT: 0 P0, 0 P1, 0 P2   PASS
+    SKIP docker build: docker is not on PATH
+    CI MIRROR GATE: green in 192s
+
+Ran `.venv\Scripts\python.exe scripts\check.py return_policy` against real production
+before this task's deploy: exit code 2, `usage: check.py stripe_mode_reported|...`
+(no `return_policy` name existed yet) — the "red before" proof for the CLI itself,
+on top of the monkeypatched unit test above.
+
+**Not changed:** colours, fonts, the first-screen layout, consent logic, the GA4 id,
+the four delivery prompts, payment provider, hosting, price, permissions in Google
+Cloud, the free-preview limit of three. No new dependency.
+
+**Merge blocked from here:** `main` is checked out in `C:\Users\KEVIN\dev\studioface-v2`,
+so this worktree cannot move it. Committed on `task/52-structured-data` only. The
+orchestrator merges, pushes `origin main`, and watches the deploy; once live,
+`scripts\check.py return_policy` should be run once more against the deployed build,
+which is this task's own final check.
+
+## 22 September 2026 — closing out: five loose ends, one real defect among them
+
+Four of the six tasks in this run are green and deployed. Two are blocked on Kevin and are
+left in work/queue/ rather than quietly marked done.
+
+The repository-integrity question from the night before is now settled by a real diff, not
+by inference. A fresh clone from GitHub and the working copy sit at the same commit with a
+zero-line diff of tracked content, no commit titled "seed" is reachable from main, and
+core.bare reads false in both. The worktree the stuck task left behind held nothing beyond
+main and is gone. Worth recording honestly: that audit's first pass said "not clean", and
+it was right to — the diff was not empty because a setup commit of mine had not been
+pushed. The fix was to push it and re-run the comparison, not to soften the sentence.
+
+The real defect this run found was Kevin's, not a test's. He ran the free-preview limit
+test by hand in a real browser, because production's human check is the real widget and no
+script can solve it. The limit itself works: the fourth attempt came back in a second with
+no image generated, the right sentence, and an enabled buy button. But after a reload the
+buy button rendered disabled, the count went to zero and the sentence vanished, while the
+server still held his photos — a sale lost to a page refresh. The page had never saved the
+"free tries spent" flag, and it read both the photo count and the button's enabled state
+from the browser's own file list, which is genuinely empty after a reload because the
+photos live on the server. Fixed, deployed, and proved with a browser test that presses
+buy after a reload and reads the request to confirm it sells the stored batch. The guard
+that refuses to sell an empty set still passes, with its own test.
+
+On the Search Console notice: the answer was not to satisfy the warning. Google's own
+free-listings policy excludes services that do not result in ownership of a tangible
+product, so this shop can never be a merchant listing whatever the markup says. Inventing
+a shipping block and a return window to silence a warning would have put false statements
+about the product on the page. Instead the markup now states the truth — a return policy
+of returns-not-permitted, matching what the terms actually say about custom digital
+content and the lost right of withdrawal, referenced by every offer — and says nothing at
+all about shipping, because there is no shipping.
+
+Still blocked on Kevin, both left in the queue: the owner-alert email cannot be wired
+because the repository variable OWNER_ALERT_EMAIL does not exist (seventeen repository
+variables, none named that, and no environment-scoped ones either), and his limit-path
+record stays at what he saw rather than being upgraded to "both paths work" by a test
+vouching for the page on his behalf.
+
+fal balance across this run: 4.4856 -> 4.2456, twenty-four cents, spent by the closing
+browser runs.

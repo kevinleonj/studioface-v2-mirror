@@ -8,3 +8,17 @@
 - Deploy: CI on push to main (deploy.yml). No human tag. No manual deploy command anywhere.
 - Consent Mode v2 Advanced, url_passthrough + ads_data_redaction. PostHog cookieless optional.
 - Price: 19,99 € (EUR price id from Terraform output), $9.99 for Ecuador variant.
+- Structured data (task 52, 22 Sep 2026): StudioFace can never earn a Google merchant
+  listing — it sells generated images delivered by email, not a tangible product, and
+  Google's free-listings policy excludes exactly that
+  (support.google.com/merchants/answer/12077589, "Services: labor, time, effort,
+  expertise, or actions, which do not result in ownership of a tangible product"). The
+  Product markup stays anyway because it earns the ordinary product snippet with the
+  price, which Google's product-snippet page allows. Of Search Console's two warnings:
+  hasMerchantReturnPolicy is answered honestly — a MerchantReturnPolicy node nested
+  under Organization on /legal/terminos/ (Google's own recommended nesting), with
+  applicableCountry ES, returnPolicyCategory MerchantReturnNotPermitted (no returnable
+  window invented — none exists), and merchantReturnLink pointing at the real
+  #devoluciones anchor on that page; every Product's offers references it by "@id".
+  shippingDetails is deliberately NOT added — there is no shipping, and a zero-cost
+  zero-day shipping block would be a false statement about a service.
