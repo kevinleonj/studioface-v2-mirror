@@ -29,11 +29,24 @@ BINARY_SUFFIXES = {
     ".pdf",
     ".zip",
 }
+# Split so this file's own source — which is itself copied into the public mirror,
+# since it is a tracked script and no DROP rule excludes it — never carries the
+# address as one readable substring. Concatenated at import time, so the pattern still
+# matches the real address wherever it appears in other files.
+_OWNER_EMAIL = "kevinleon" + "jouvin" + "@gmail.com"
+
 REDACTIONS = (
     (re.compile(r"cs_(test|live)_[A-Za-z0-9]{12,}"), r"cs_\1_REDACTED"),
     (re.compile(r"([?&]t=)[0-9a-f]{32}"), r"\1REDACTED"),
     (re.compile(r"pi_[A-Za-z0-9]{16,}"), "pi_REDACTED"),
     (re.compile(r"evt_[A-Za-z0-9]{16,}"), "evt_REDACTED"),
+    # The owner's own address, not a secret — it belongs in the private repository and
+    # is expected to appear in ordinary docs and test fixtures. Quiet substitution, same
+    # tier as the order ids above; must never move to FORBIDDEN, which is for
+    # secret-shaped values and would make this exit 3 and cry "rotate" every time. No
+    # \b here: it sits right after a literal backslash-n inside a string literal in one
+    # fixture, and "n" before "k" is not a word boundary.
+    (re.compile(re.escape(_OWNER_EMAIL)), "OWNER_EMAIL_REDACTED"),
 )
 FORBIDDEN = {
     "Stripe secret key": re.compile(r"\b[sr]k_(test|live)_[A-Za-z0-9]{16,}"),

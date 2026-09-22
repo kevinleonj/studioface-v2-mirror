@@ -82,7 +82,7 @@ def test_inputs_remember_plain_answers(monkeypatch, tmp_path):
     b.DRY = False
     answers = iter(["studio-face-fresh-start", "", "kevinleonj", "0" * 32, "1" * 32, "", "2"])
     monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
-    monkeypatch.setattr(b, "sh", lambda a, **kw: "kevin@limeralda.com\nkevinleonjouvin@gmail.com")
+    monkeypatch.setattr(b, "sh", lambda a, **kw: "kevin@limeralda.com\nOWNER_EMAIL_REDACTED")
     monkeypatch.setattr(b, "keyring_or_none", lambda: None)
     monkeypatch.setattr(
         b, "ask_secret", lambda key: "sk_test_x" if key == "stripe_key" else "unset"
@@ -90,7 +90,7 @@ def test_inputs_remember_plain_answers(monkeypatch, tmp_path):
     c = b.inputs(reset=False)
     assert c["project"] == "studio-face-fresh-start" and c["domain"] == "studioface.app"
     assert c["ga4_id"] == "unset"
-    assert c["gcp_account"] == "kevinleonjouvin@gmail.com"  # picked by number, never typed
+    assert c["gcp_account"] == "OWNER_EMAIL_REDACTED"  # picked by number, never typed
     # second run: Enter keeps every saved value
     monkeypatch.setattr("builtins.input", lambda prompt: "")
     assert b.inputs(reset=False)["gh_owner"] == "kevinleonj"
@@ -112,7 +112,7 @@ def test_google_account_is_picked_from_gcloud_list_not_typed(monkeypatch):
     b.DRY = False
     calls = []
     monkeypatch.setattr(
-        b, "sh", lambda a, **kw: calls.append(a) or "kevin@limeralda.com\nkevinleonjouvin@gmail.com"
+        b, "sh", lambda a, **kw: calls.append(a) or "kevin@limeralda.com\nOWNER_EMAIL_REDACTED"
     )
     answers = iter(
         ["9", "kevinlenjouvin@gmail.com", "2"]
@@ -120,7 +120,7 @@ def test_google_account_is_picked_from_gcloud_list_not_typed(monkeypatch):
     monkeypatch.setattr("builtins.input", lambda prompt: next(answers))
     c = {"gcp_account": "kevinlenjouvin@gmail.com"}  # a saved typo must not survive
     b.pick_google_account(c)
-    assert c["gcp_account"] == "kevinleonjouvin@gmail.com"
+    assert c["gcp_account"] == "OWNER_EMAIL_REDACTED"
     assert all("auth login" not in " ".join(a) for a in calls)
 
 

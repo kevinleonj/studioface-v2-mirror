@@ -141,7 +141,7 @@ def _fake_stripe(price_livemode: bool = False, price_raises: bool = False):
 
 
 @pytest.fixture
-def built(monkeypatch):
+def built(monkeypatch, request):
     """Import `app.entry` with its boundaries already faked, then run `build()`.
 
     The order matters and cost a second red deploy to learn. `app/entry.py` ends with
@@ -156,6 +156,10 @@ def built(monkeypatch):
 
     So: keep GCP_PROJECT out of the environment across the import, patch at the source
     modules, and only then call `build()` ourselves.
+
+    Task 51: accepts an optional indirect param, a dict of extra environment variables
+    layered on top of ENV (e.g. OWNER_ALERT_EMAIL), so both sides of a wiring can be
+    proven at the composition root without a second copy of this setup.
     """
     import google.auth
     from google.cloud import firestore as real_firestore
@@ -178,10 +182,24 @@ def built(monkeypatch):
 
     assert entry.app is None, "entry built itself at import time; the env was not clean"
 
-    for name, value in ENV.items():
+    extra_env = getattr(request, "param", {})
+    for name, value in {**ENV, **extra_env}.items():
         monkeypatch.setenv(name, value)
     monkeypatch.setattr(entry, "_enqueue_factory", lambda s: lambda order_id: None)
     return entry.build()
+
+
+def _deps_from(built):
+    """The Deps instance any route closure carries. Same walk the stripe_mode and
+    stripe_price_live tests below already do inline; task 51 is this pattern's third
+    caller, so it is named once here rather than copied a third time."""
+    for route in built.routes:
+        closure = getattr(getattr(route, "endpoint", None), "__closure__", None) or ()
+        for cell in closure:
+            candidate = getattr(cell, "cell_contents", None)
+            if hasattr(candidate, "stripe_mode"):
+                return candidate
+    raise AssertionError("no route closure carries Deps")
 
 
 def test_the_application_is_built_at_all(built):
@@ -373,6 +391,23 @@ def test_price_is_live_false_when_no_price_is_configured(monkeypatch):
     from app import entry
 
     assert entry._price_is_live(_settings(price_eur=None)) is False
+
+
+# --------------------------------------------- task 51: owner_alerts at startup
+
+
+def test_owner_alerts_is_false_when_owner_alert_email_is_unset(built):
+    """The state production was actually in before Kevin set the OWNER_ALERT_EMAIL
+    repository variable: ENV carries no such key, so build() must wire False, not
+    leave the field at some other default."""
+    assert _deps_from(built).owner_alerts is False
+
+
+@pytest.mark.parametrize("built", [{"OWNER_ALERT_EMAIL": "owner@example.com"}], indirect=True)
+def test_owner_alerts_is_true_when_owner_alert_email_is_set(built):
+    """Twin of the test above: identical composition, one address configured, so
+    this field cannot be hard-coded to False and still pass."""
+    assert _deps_from(built).owner_alerts is True
 
 
 if __name__ == "__main__":

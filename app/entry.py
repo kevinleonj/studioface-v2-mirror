@@ -19,7 +19,7 @@ from app.adapters.ga4 import Ga4Purchase
 from app.adapters.gcs import preview_resigner, signed_url_maker, source_uploader
 from app.adapters.pubsub_push import pubsub_verifier
 from app.adapters.turnstile import verify_turnstile
-from app.config import Settings, stripe_mode
+from app.config import Settings, hostname_of, stripe_mode
 from app.core import REFUND_ALARM_THRESHOLD, Order, OrderStore, Pipeline, Refund, threaded_batch
 from app.guards import DailyOrderCeiling, RateLimiter
 from app.logs import configure_logging, id_prefix, log_call
@@ -319,28 +319,27 @@ class FirestoreOrderStore(OrderStore):
         # newer one wrote, and an unexpected key must not take the service down.
         return Order(**{k: v for k, v in data.items() if k in _ORDER_FIELDS})
 
-    def record_refund(self, order_id: str, reason: str, day: str) -> list[tuple[str, str]] | None:
+    def record_refund(self, order_id: str, reason: str, day: str) -> list[tuple[str, str]]:
         """Same contract as OrderStore.record_refund: read today's tally, append,
-        and — the moment the count first reaches REFUND_ALARM_THRESHOLD — flip
-        `alarmed` and hand the caller the list that tripped it.
+        and hand back the day's first REFUND_ALARM_THRESHOLD entries — every call,
+        not only the one that first reaches the threshold.
 
         Read-then-write, same as the `killswitch` property above, not a Firestore
-        transaction like FirestoreCounter's: this is an alert (worth going to look
-        at), never a ceiling money depends on, so the same accepted race
-        task 41's HANDOFF entry documents for the credit-exhaustion alert applies
-        here too — two refunds landing in the same instant on two instances could
-        under-count by one and delay the alert to the next refund, never send it
-        twice for the same threshold crossing.
+        transaction like FirestoreCounter's: two refunds landing in the same instant
+        on two instances could under-count this list by one entry. That is still an
+        acceptable race for task 41's original reason — this only decides WHICH
+        orders the email names, never WHETHER to send it. Task 71 moved the
+        "whether" decision (the part an under-count could double-send) off this
+        read-then-write and onto Pipeline._alert_once's atomic Counter transaction —
+        the fix this method used to promise (an `alarmed` flag read and written in
+        two separate steps) but could not actually keep, because two instances can
+        both read "not alarmed yet" before either one writes.
         """
         ref = self.db.collection("config").document(f"refund_tally_{day}")
         snap = ref.get()
         data = snap.to_dict() if snap.exists else {}
         entries = list(data.get("entries", [])) + [{"id": order_id, "reason": reason}]
-        alarmed = bool(data.get("alarmed", False))
-        fire = len(entries) >= REFUND_ALARM_THRESHOLD and not alarmed
-        ref.set({"entries": entries[:REFUND_ALARM_THRESHOLD], "alarmed": alarmed or fire})
-        if not fire:
-            return None
+        ref.set({"entries": entries[:REFUND_ALARM_THRESHOLD]})
         return [(e["id"], e["reason"]) for e in entries[:REFUND_ALARM_THRESHOLD]]
 
 
@@ -383,6 +382,12 @@ def build(settings: Settings | None = None) -> object:
         # (key "orders:<day>"), never RateLimiter's own daily key below - a preview
         # costs nothing and this counts money actually taken.
         order_ceiling=DailyOrderCeiling(counter=FirestoreCounter(db)),
+        # Task 71: once-per-UTC-day gate for every owner alert (the two ceilings
+        # above and the refund-rate alarm), atomic across every Cloud Run instance
+        # the same way order_ceiling's counter is — a separate FirestoreCounter
+        # instance, but the same Firestore "counters" collection, so a key claimed
+        # through this one is claimed for every other one too.
+        alert_counter=FirestoreCounter(db),
     )
     limiter = RateLimiter(counter=FirestoreCounter(db), salt=s.app_token_secret)
     # Named so task 29's storage-only path (store_sources_fn=preview.store_only) shares
@@ -405,7 +410,9 @@ def build(settings: Settings | None = None) -> object:
         store_sources_fn=preview.store_only,
         webhook_secret=s.stripe_webhook_secret,
         tasks_token=s.tasks_token,
-        verify_turnstile=lambda token, ip: verify_turnstile(s.turnstile_secret, token, ip),
+        verify_turnstile=lambda token, ip: verify_turnstile(
+            s.turnstile_secret, token, ip, hostname_of(s.public_url)
+        ),
         # /internal/budget sets the kill switch. Unset config refuses everything.
         verify_pubsub=pubsub_verifier(s.pubsub_push_sa or "", s.pubsub_push_audience or ""),
         retrieve_session=_session_retriever(s),
@@ -418,6 +425,10 @@ def build(settings: Settings | None = None) -> object:
         # Task 30, preview-survives: the OUTPUT bucket, same as `out_bucket` above —
         # `Preview.__call__` writes the free-preview result there, never to bucket_src.
         resign_preview=preview_resigner(gcs, s.bucket_out, sign_url),
+        # Task 51: OWNER_ALERT_EMAIL is wired through to Terraform and Cloud Run by
+        # task 41; this is the only place that turns "is it configured" into a
+        # reported fact for /health, and it never reports the address itself.
+        owner_alerts=bool(s.owner_alert_email),
     )
 
 

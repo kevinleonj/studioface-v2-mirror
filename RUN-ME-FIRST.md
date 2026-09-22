@@ -32,7 +32,7 @@ Expected line 2: `interpreter: ...\.venv\Scripts\python.exe`, then `Tools OK.`, 
 | # | Prompt | Answer |
 |---|---|---|
 | 1 | GCP project id to CREATE | studio-face-fresh-start |
-| 2 | Google account | a numbered list of the accounts gcloud already knows; pick **kevinleonjouvin@gmail.com** by number; 0 = log in another. Nothing is typed. |
+| 2 | Google account | a numbered list of the accounts gcloud already knows; pick **OWNER_EMAIL_REDACTED** by number; 0 = log in another. Nothing is typed. |
 | 3 | Domain | Enter (studioface.app) |
 | 4 | GitHub owner | kevinleonj |
 | 5 | Cloudflare account id | 0755f56b4e85398ba3c258abfa2a4c61 |

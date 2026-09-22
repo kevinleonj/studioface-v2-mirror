@@ -4,7 +4,7 @@ actually produced.
 WHY THIS EXISTS, measured in Kevin's own browser, 21 September: a reviewer uploaded
 one empty file, the server refused it, then a good photo — and the shop answered "you
 have used your free tries". The order was human check, THEN count, THEN validate: an
-upload the server was always going to refuse still spent one of the visitor's three
+upload the server was always going to refuse still spent one of the visitor's two
 hourly tries before it ever reached `validate_uploads`.
 
 Fixed order (app/main.py `_register_preview`): human check, validate the files, and
@@ -16,7 +16,7 @@ non-atomic peek before the model runs, which reopens the exact race two requests
 seeing "2 used" and both proceeding, at real fal cost), is argued in guards.py's
 `refund` docstring and HANDOFF.md, task 28.
 
-The twin every one of these needs: the fourth successful preview inside the hour must
+The twin every one of these needs: the third successful preview inside the hour must
 still get the limit answer, proving the fix does not simply stop counting altogether.
 """
 
@@ -54,7 +54,7 @@ class ScriptedModel:
         return outcome
 
 
-def build(preview_fn, per_client=3):
+def build(preview_fn, per_client=2):
     pipeline = Pipeline(
         store=OrderStore(),
         model=type("M", (), {"edit": lambda self, u, p: "x"})(),
@@ -122,18 +122,18 @@ def test_a_successful_preview_does_reduce_the_remaining_tries():
     assert r.json()["limited"] is True and r.json()["preview_url"] is None
 
 
-def test_the_fourth_successful_preview_inside_the_hour_is_refused():
-    """The twin. Three successes must still leave the cap standing, not just the
-    accounting: a fourth attempt must never reach the model at all — task 29 answers
-    it from the storage-only path instead, never a fourth `model.edit` call."""
-    model = ScriptedModel(*(["https://cdn/preview.png"] * 3))
-    c = build(model, per_client=3)
-    for _ in range(3):
+def test_the_third_successful_preview_inside_the_hour_is_refused():
+    """The twin. Two successes must still leave the cap standing, not just the
+    accounting: a third attempt must never reach the model at all — task 29 answers
+    it from the storage-only path instead, never a third `model.edit` call."""
+    model = ScriptedModel(*(["https://cdn/preview.png"] * 2))
+    c = build(model, per_client=2)
+    for _ in range(2):
         assert post(c).status_code == 200
     r = post(c)
     assert r.status_code == 200, r.text
     assert r.json()["limited"] is True and r.json()["preview_url"] is None
-    assert model.calls == 3, "the fourth attempt must never have reached the model"
+    assert model.calls == 2, "the third attempt must never have reached the model"
 
 
 if __name__ == "__main__":

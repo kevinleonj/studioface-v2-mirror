@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
+from urllib.parse import urlsplit
 
 REQUIRED = (
     "GCP_PROJECT",
@@ -95,6 +96,19 @@ class Settings:
 
 def _host(url: str) -> str:
     return url.removeprefix("https://").removeprefix("http://").rstrip("/")
+
+
+def hostname_of(url: str) -> str:
+    """The bare hostname only — no scheme, no port, no path.
+
+    This is what Cloudflare's Turnstile siteverify reports in its own `hostname`
+    field ("Hostname where the challenge was served", docs/verified.md 2026-09-22),
+    so both sides of app.adapters.turnstile's hostname check are the same shape
+    whether the app runs at https://studioface.app or http://127.0.0.1:PORT (the
+    local funnel walk, scripts/run_funnel.py). `_host` above keeps its port because
+    api_url needs it nowhere and never had it; this one strips it on purpose, because
+    a bare `hostname` field with a port glued on would never match."""
+    return urlsplit(url).hostname or url
 
 
 def stripe_mode(key: str | None) -> str:

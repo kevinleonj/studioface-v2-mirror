@@ -39,6 +39,9 @@ OWNER_ALERT_PREFIX = "OWNER_ALERT:"
 # REFUND_ALARM_PREFIX exactly, same reasoning and same held-out equality test.
 DAILY_CEILING_ALERT_PREFIX = "OWNER_ALERT_CEILING:"
 REFUND_ALARM_PREFIX = "OWNER_ALERT_REFUNDS:"
+# Task 71's new alert, mirroring app/core.py's DAILY_PREVIEW_CAP_ALERT_PREFIX exactly,
+# same reasoning and same held-out equality test.
+DAILY_PREVIEW_CAP_ALERT_PREFIX = "OWNER_ALERT_PREVIEW_CAP:"
 
 
 @dataclass(frozen=True)
@@ -234,16 +237,51 @@ def refund_alarm(entries: list[tuple[str, str]]) -> Email:
     )
 
 
+def daily_preview_cap_alert(limit: int) -> Email:
+    """Sent to OWNER_ALERT_EMAIL, once per UTC day, the moment RateLimiter.check
+    refuses a free preview for `daily_global` (app/guards.py). Task 71, same shell
+    as daily_ceiling_alert above — plain English, no legal footer, Kevin rather than
+    a customer. Never says the shop has stopped: a preview costs nothing, so unlike
+    the paid-order ceiling this never touches the kill switch and the shop keeps
+    selling — it is the ad spend, not the shop, that needs pausing."""
+    body = (
+        f'<p style="margin:0 0 16px;font-size:16px;line-height:1.5">'
+        f"StudioFace has served {limit} free previews today, the daily ceiling. "
+        f"Visitors past it can still buy — their photos are stored and the buy "
+        f"button still works — but no more free previews run until tomorrow (UTC). "
+        f"If this is paid traffic, now is a good time to pause the ads.</p>"
+        f'<p style="margin:0;font-size:14px;line-height:1.5;color:{DIM}">'
+        f"Raise the ceiling in app/guards.py (RateLimiter.daily_global) if {limit} a "
+        f"day is genuinely too low. This is the only email you get for today's cap.</p>"
+    )
+    text = (
+        f"StudioFace has served {limit} free previews today, the daily ceiling. "
+        "Visitors past it can still buy — their photos are stored and the buy "
+        "button still works — but no more free previews run until tomorrow (UTC). "
+        "If this is paid traffic, now is a good time to pause the ads.\n\n"
+        f"Raise the ceiling in app/guards.py (RateLimiter.daily_global) if {limit} a "
+        "day is genuinely too low. This is the only email you get for today's cap.\n"
+    )
+    return Email(
+        f"StudioFace: {limit} free previews today, the daily cap",
+        _shell("Daily preview cap reached", body),
+        text,
+    )
+
+
 def for_body(body: str) -> Email:
     """The pipeline's send_email port passes a gallery link, the literal "REFUND",
-    "OWNER_ALERT:<n>", "OWNER_ALERT_CEILING:<n>" or "OWNER_ALERT_REFUNDS:<id:reason,...>".
-    Sniffing a sentinel out of a message body is a poor contract and it is called out
-    in HANDOFF as a follow-up; it is preserved here so this change stays confined to
-    what the customer (or, for the alert cases, Kevin) sees."""
+    "OWNER_ALERT:<n>", "OWNER_ALERT_CEILING:<n>", "OWNER_ALERT_PREVIEW_CAP:<n>" or
+    "OWNER_ALERT_REFUNDS:<id:reason,...>". Sniffing a sentinel out of a message body
+    is a poor contract and it is called out in HANDOFF as a follow-up; it is
+    preserved here so this change stays confined to what the customer (or, for the
+    alert cases, Kevin) sees."""
     if body == REFUND_SENTINEL:
         return refund()
     if body.startswith(DAILY_CEILING_ALERT_PREFIX):
         return daily_ceiling_alert(int(body.removeprefix(DAILY_CEILING_ALERT_PREFIX)))
+    if body.startswith(DAILY_PREVIEW_CAP_ALERT_PREFIX):
+        return daily_preview_cap_alert(int(body.removeprefix(DAILY_PREVIEW_CAP_ALERT_PREFIX)))
     if body.startswith(REFUND_ALARM_PREFIX):
         pairs = body.removeprefix(REFUND_ALARM_PREFIX).split(",")
         entries = [tuple(pair.split(":", 1)) for pair in pairs if pair]

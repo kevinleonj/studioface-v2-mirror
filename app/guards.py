@@ -8,12 +8,34 @@ and `now` is time.time; here they are a dict and a fake clock.
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Protocol
 
 # ---------------------------------------------------------------- rate limiting
+
+
+def _network(ip: str) -> str:
+    """The block one address belongs to, for keys meant to catch many addresses
+    inside the one real connection they came from: IPv4 to its /24, IPv6 to its
+    /64. A single /24 is cheap to rent, so that ceiling already worked. A single
+    /64 holds 2**64 addresses -- keying on the full address let every one of them
+    look like a brand new subnet, so the ceiling did nothing (measured: 399
+    addresses in one /64 took 300 previews, the whole daily budget).
+
+    An `ip` that is not a parseable address at all (an empty header, a hostname,
+    something malformed) is returned unchanged rather than raised on -- this
+    guards a rate-limit check on the money path, and the existing behaviour for
+    an unparsable value must stand.
+    """
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return ip
+    prefix = 24 if addr.version == 4 else 64
+    return str(ipaddress.ip_network(f"{ip}/{prefix}", strict=False))
 
 
 class Counter(Protocol):
@@ -64,7 +86,7 @@ class RateLimiter:
     """
 
     counter: Counter
-    per_client: int = 3
+    per_client: int = 2
     per_subnet: int = 20
     window_s: int = 3600
     daily_global: int = 300
@@ -80,23 +102,36 @@ class RateLimiter:
 
     def check_named(self, action: str, ip: str, limit: int, window_s: int) -> bool:
         """A ceiling for something other than the preview, under its own key, so the
-        two budgets cannot eat each other."""
-        return self.counter.increment_if_below(f"{action}:{self._hash(ip)}", limit, window_s)
+        two budgets cannot eat each other. Keyed on `ip` alone (no user agent), which
+        makes this a network-scoped ceiling in the same way the subnet key below is —
+        so it narrows to `_network(ip)` for the same reason: one /64 must not act
+        like 2**64 separate callers."""
+        key = f"{action}:{self._hash(_network(ip))}"
+        return self.counter.increment_if_below(key, limit, window_s)
 
     def check_store(self, ip: str, user_agent: str) -> bool:
         """Task 29's own ceiling, in its own namespace (`store:`) so it can never eat
-        the preview budget's keys or be eaten by them. Same client identity as
-        `check` (ip+user_agent hash) — a visitor's storage budget is the same visitor
-        whether or not the model ever ran for them."""
-        key = f"store:{self._hash(ip, user_agent)}"
+        the preview budget's keys or be eaten by them. The `store_only` path
+        (app/main.py) reaches this WITHOUT ever calling `check`, so it is this key,
+        not `check`'s subnet key, that stops one IPv6 /64 minting unlimited stored
+        batches — hence `_network(ip)` here too. `user_agent` stays in the hash
+        unchanged, so it still takes the same /64 AND the same user agent to share
+        one budget, not just the same /64."""
+        key = f"store:{self._hash(_network(ip), user_agent)}"
         return self.counter.increment_if_below(key, self.per_store, self.window_s)
 
     def _keys(self, ip: str, user_agent: str) -> tuple[str, str, str]:
         """The three keys one preview touches. `check` and `refund` both call this,
-        so the two can never drift apart and give back the wrong document."""
+        so the two can never drift apart and give back the wrong document.
+
+        The client key stays on the full `ip` (+ user agent) — narrowing it to a
+        network would lump every visitor on one household or office connection
+        under a single per-client cap, which is not what `per_client` is for. Only
+        the subnet key narrows, via `_network`, to the block the connection is
+        actually in: /24 for IPv4, /64 for IPv6 — see `_network`'s docstring for why
+        the /64 case matters."""
         day = str(int(self.now() // 86400))
-        subnet = ".".join(ip.split(".")[:3]) if ip.count(".") == 3 else ip
-        return f"c:{self._hash(ip, user_agent)}", f"s:{self._hash(subnet)}", f"g:{day}"
+        return f"c:{self._hash(ip, user_agent)}", f"s:{self._hash(_network(ip))}", f"g:{day}"
 
     def check(self, ip: str, user_agent: str) -> tuple[bool, str]:
         client_key, subnet_key, daily_key = self._keys(ip, user_agent)

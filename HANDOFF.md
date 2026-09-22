@@ -519,7 +519,7 @@ wise. app/emails.py now sends html + text for both messages.
 
     POST https://api.studioface.app/api/recuperar  ->  {"sent": true}
     GET  https://api.resend.com/emails/01a0b177-4a3f-738c-ae47-fb540912bf8c
-      to        kevinleonjouvin@gmail.com
+      to        OWNER_EMAIL_REDACTED
       from      StudioFace <fotos@studioface.app>
       subject   Tus fotos de StudioFace ya están listas
       last_event delivered
@@ -908,7 +908,7 @@ from outside every 15 minutes; everything after the checkout button is still inf
 **The policy is already `p=quarantine`.** Read with DNS-over-HTTPS from two independent
 resolvers, identical from both (`docs/verified.md`, 18 Sep):
 
-    _dmarc.studioface.app  "v=DMARC1; p=quarantine; rua=mailto:kevinleonjouvin@gmail.com"
+    _dmarc.studioface.app  "v=DMARC1; p=quarantine; rua=mailto:OWNER_EMAIL_REDACTED"
     studioface.app         "v=spf1 include:_spf.mx.cloudflare.net include:amazonses.com ~all"
     resend._domainkey      RSA public key present   (the only signing selector)
 
@@ -5034,3 +5034,583 @@ vouching for the page on his behalf.
 
 fal balance across this run: 4.4856 -> 4.2456, twenty-four cents, spent by the closing
 browser runs.
+
+## 2026-09-22 (task 70) — ipv6-limiter: one home network no longer looks like 399 subnets
+
+The per-subnet ceiling in `RateLimiter` (`app/guards.py`) existed to stop one connection
+draining the whole daily image budget, and it worked for an IPv4 address because the
+subnet key was cut at the third dot into a /24. An IPv6 address has no dots, so the old
+code fell through to `subnet = ip` — the full address — and every one of the roughly
+18 quintillion addresses inside a single /64 became its own subnet of one. Measured on
+the real limiter, tests/test_limiter_ipv6.py, before the fix: 399 addresses picked from
+one real /64, three tries each, got 300 previews through — not the 20 the subnet ceiling
+promises, the entire daily budget. After the fix, capped at 20, exactly like a /24 always
+was.
+
+Added `_network()` to app/guards.py (stdlib `ipaddress`, no new dependency): an IPv4
+address narrows to its /24, an IPv6 address to its /64, and anything that does not parse
+as an address at all — an empty header, a hostname, something malformed — is returned
+unchanged rather than raised on, because this sits inside a rate-limit check on the money
+path.
+
+Narrowed: the subnet key inside `_keys()` (shared by `check` and `refund`), the single key
+`check_named` builds from `ip` alone (the "rec" recovery-cap key has no user agent mixed
+in, so it was exactly as exposed to the same /64 problem as the subnet key), and the key
+`check_store` builds — `store_only` (task 29's never-block-a-buyer fallback) reaches
+`check_store` WITHOUT ever calling `check`, so its own key was an equally open door to the
+same drain and needed the same fix; `user_agent` stays in that hash unchanged, so it still
+takes the same /64 AND the same user agent to share one store budget.
+
+Left alone on purpose: the client key inside `_keys()` (full `ip` + `user_agent`, task
+`per_client` cap) — narrowing that to a network would lump every visitor on one household
+or office connection under one visitor's cap, which is a different and worse defect than
+the one being fixed. `visitor_address` in app/main.py (which decides what "ip" even is,
+from X-Forwarded-For) and the raw address handed to `verify_turnstile` are both unchanged
+— Turnstile verifies the real client address, and narrowing what it sees would be wrong.
+The free-preview limit (`per_client`) itself was not touched, per the task boundary.
+
+New test file tests/test_limiter_ipv6.py (3 tests): the 399-addresses-in-one-/64
+reproduction above (shown failing against the pre-fix code — `300 == 20` — then passing);
+the existing IPv4 /24 behaviour still capped at 20; an address that does not parse at all
+(`"not-an-address-at-all"`, `""`) still returns `(True, "ok")` on a fresh limiter rather
+than raising.
+
+Evidence:
+```
+.venv\Scripts\python.exe -m pytest tests/test_limiter_ipv6.py -q
+3 passed in 0.10s
+```
+Before the fix, the same file: `1 failed, 2 passed` — `AssertionError: 300 previews got
+through one /64 ... assert 300 == 20`.
+
+Also run: tests/test_preview_counting.py, tests/test_buy_at_limit.py,
+tests/test_daily_stops.py, tests/test_visitor_address.py, tests/test_guards_http.py,
+tests/test_fal_bill_ceiling.py, tests/test_recuperar.py, tests/test_secure_forwarding.py
+— `86 passed`, no regressions.
+
+`.venv\Scripts\python.exe scripts\ci.py`: `CI MIRROR GATE: green in 209s` (848 passed,
+158 skipped).
+
+**Not changed:** colours, fonts, first-screen layout, consent logic, the GA4 id, the four
+delivery prompts, payment provider, hosting, price, permissions in Google Cloud, the
+free-preview limit (`per_client`). No new dependency — `ipaddress` is stdlib.
+
+**Merge blocked from here:** `main` is checked out in `C:\Users\KEVIN\dev\studioface-v2`,
+so this worktree cannot move it. Committed on `task/70-ipv6-limiter` only. The orchestrator
+merges, pushes `origin main`, and watches the deploy.
+
+## 2026-09-22 (task 51) — owner-alert-email-wired: /health now says whether the alert can send
+
+Task 41 already did the real work: `infra/gcp.tf` (line 211-212) sets `OWNER_ALERT_EMAIL`
+on Cloud Run from `var.owner_alert_email`, `infra/variables.tf` declares that variable
+with an empty default, and `.github/workflows/deploy.yml` (the `infra` job) already passes
+`TF_VAR_owner_alert_email: ${{ vars.OWNER_ALERT_EMAIL }}`. All three were read first and
+none of them needed a line changed — confirmed before touching anything, per the task's own
+instruction not to duplicate task 41's wiring. The repository variable itself was the only
+missing piece, and it was added by Kevin at 12:57 UTC today, before this run started.
+
+What this task added: a way to tell, from outside, whether the alert can actually send,
+without ever printing the address. `app/main.py`'s `Deps` and `make_app` gained an
+`owner_alerts: bool = False` field/parameter, reported in `/health` as its own top-level
+key — not nested under or derived from `killswitch`, on purpose, because a later task in
+this run removes `killswitch` from `/health` and this field has to survive that. Wiring
+point is `app/entry.py`'s `build()`: `owner_alerts=bool(s.owner_alert_email)`, so the field
+tracks whatever `OWNER_ALERT_EMAIL` actually resolves to on the running revision, never a
+guess. Nothing about the send path itself changed — `Pipeline._handle_credit_exhausted`
+already refuses to call `send_email` when `owner_email` is falsy (task 41), so "empty value
+sends nothing" was already true; this task only makes it visible.
+
+**Failing first**, both sides:
+
+    .venv\Scripts\python.exe -m pytest tests/test_health.py -q
+    TypeError: make_app() got an unexpected keyword argument 'owner_alerts'
+    11 failed, 3 passed
+
+After adding the field to `Deps`/`make_app`/the health route:
+
+    .venv\Scripts\python.exe -m pytest tests/test_health.py -q
+    14 passed in 1.51s
+
+At the composition root (CLAUDE.md lesson 8 — entry.py counts): added
+`test_owner_alerts_is_false_when_owner_alert_email_is_unset` and
+`test_owner_alerts_is_true_when_owner_alert_email_is_set` to
+`tests/test_entry_builds.py`. Proved the true-case test is real by temporarily hard-coding
+`owner_alerts=False` in `app/entry.py`'s `build()` call and re-running:
+
+    .venv\Scripts\python.exe -m pytest tests/test_entry_builds.py -k owner_alerts -q
+    AssertionError: assert False is True
+    1 failed, 1 passed
+
+then restored the real line (`owner_alerts=bool(s.owner_alert_email)`) and both pass:
+
+    .venv\Scripts\python.exe -m pytest tests/test_entry_builds.py -q
+    13 passed in 1.31s
+
+The `built` fixture gained an indirect parameter (a dict of extra env vars layered on
+`ENV`) so the true-case test could reuse the fixture's setup rather than copy it a second
+time — this is the pattern's third occurrence in the file (after the two `stripe_mode`/
+`stripe_price_live` composition tests), so it was also given a name, `_deps_from()`,
+instead of a third inline copy of the same closure walk.
+
+**Local checks** (`.venv\Scripts\python.exe scripts\ci.py`, from inside `wt-51`, using
+`C:\Users\KEVIN\dev\studioface-v2\.venv\Scripts\python.exe` — this worktree has no `.venv`
+of its own):
+
+    852 passed, 158 skipped, 2 warnings in 88.81s
+    WORKFLOW LINT: ok (every workflow can run, every step is mirrored or cloud-only)
+    OK: all assets within limits
+    DESIGN AUDIT: 0 P0, 0 P1, 0 P2
+    SKIP docker build: docker is not on PATH
+    CI MIRROR GATE: green in 185s
+
+**Production, run before this branch is deployed (expected to still be the old shape):**
+
+    python -c "import json,urllib.request; print(json.load(urllib.request.urlopen('https://studioface.app/health')))"
+    {'ok': True, 'killswitch': False, 'stripe_mode': 'live', 'stripe_price_live': True}
+
+The exact check the task asked to be run and reported regardless of outcome:
+
+    python -c "import json,sys,urllib.request; sys.exit(0 if json.load(urllib.request.urlopen('https://studioface.app/health')).get('owner_alerts') is True else 1)"
+    exit code: 1
+
+That is the correct, expected answer right now: `owner_alerts` is not in production yet
+because this branch has not been merged or deployed. **Not run:** the real `[TEST]` alert
+email through `Pipeline`'s send path — sending it before `OWNER_ALERT_EMAIL` has reached a
+live Cloud Run revision would either fail closed (no address configured) or, worse, be
+impossible to attribute to this change versus whatever revision happens to be serving
+traffic at the moment. Once the orchestrator deploys this branch, the production `/health`
+check above should flip to exit code 0, and only then should the one real `[TEST]` alert be
+sent through the same code path task 41 built, with the Resend delivery id pasted here.
+
+**Not changed:** colours, fonts, first-screen layout, consent logic, the GA4 id, the four
+delivery prompts, payment provider, hosting, price, permissions in Google Cloud, the
+free-preview limit. No new dependency.
+
+**Merge blocked from here:** `main` is checked out in `C:\Users\KEVIN\dev\studioface-v2`,
+so this worktree cannot move it. Committed on `task/51-owner-alert` only. The orchestrator
+merges, pushes `origin main`, and watches the deploy — after which the production `/health`
+check and the one real `[TEST]` alert (Resend delivery id) are still owed and should be run
+against the deployed revision.
+
+## 2026-09-22 (task 71) — daily-cap-alert: the free-preview ceiling now pages Kevin,
+## and the refund alarm's once-per-day gate moved off a per-process set
+
+**The gap this closes:** `RateLimiter.check` (app/guards.py) already refused a free
+preview once `daily_global` (300/UTC day) was spent — the route just fell through to
+the storage-only fallback (`_stored_handle`, task 29) and told nobody. Under paid ad
+traffic that is invisible: the shop quietly stops serving previews while the ads that
+sent the traffic keep spending, and the first anyone hears about it is the credit
+card statement. `app/main.py`'s `/api/preview` now calls a new
+`_note_daily_cap(d, why)` the moment `why == "daily_cap"`, which calls
+`Pipeline.note_daily_preview_cap(d.limiter.daily_global)` — one new email, once per
+UTC day, naming the count (`OWNER_ALERT_PREVIEW_CAP:<limit>`, `emails.py`'s
+`daily_preview_cap_alert`). Never touches the kill switch: a preview costs nothing,
+so the shop keeps selling; it is the ad spend that needs pausing, not StudioFace.
+
+**The more important half — the once-per-day bug:** task 42's refund alarm decided
+"have I already emailed Kevin about today's refunds" with a plain Python set on
+`OrderStore` (the old `_refund_alarmed`, `app/core.py` line ~211 before this task).
+Cloud Run runs many instances and replaces them freely; that set lived in one
+process, was never shared, and never survived a restart — two instances could each
+independently reach the 3-refund threshold and each send its own page, or a restart
+mid-day could forget the alarm had already fired. `FirestoreOrderStore.record_refund`
+(app/entry.py) had the same bug in different clothes: a **read-then-write** (`read
+`alarmed`, decide, then `set()` the document) — its own docstring claimed this "never
+sends twice", which is false under a genuine race: two instances can both read
+`alarmed: false` before either one writes `alarmed: true`, and both then send.
+
+**The fix:** deciding "whether to send" is no longer `record_refund`'s job at all.
+`OrderStore.record_refund` / `FirestoreOrderStore.record_refund` now only tally —
+append this refund and hand back the day's first `REFUND_ALARM_THRESHOLD` entries,
+every call, unconditionally. A new `Pipeline._alert_once(key)` decides whether THIS
+call is the one that emails Kevin, via a new `Pipeline.alert_counter: Counter` field
+(same `Counter` protocol `DailyOrderCeiling` and `RateLimiter` already trust with
+money) and `counter.increment_if_below(key, limit=1, ttl_s=86400)`. That call is one
+Firestore transaction (`app/adapters/firestore_counter.py`, already proven atomic
+under 24 concurrent threads by `tests/test_counter_atomicity.py`): of any number of
+instances racing the same key in the same instant, exactly one gets `True` back:
+every other one, on this instance or any other, gets `False`. A read-then-write can
+never make that guarantee because the read and the write are two separate
+operations; a transactional check-and-increment can, because Firestore aborts and
+retries one side of the race until only one commit sees `n < limit`. `_alert_once` is
+now also what gates the paid-order daily-ceiling alert (`Pipeline.admit`), which used
+to key off the kill switch's own off-to-on transition — also a plain read then a
+plain write in `FirestoreOrderStore.killswitch`, so it carried the identical race.
+The kill switch itself still gets set exactly as before; only which mechanism decides
+whether the EMAIL goes out changed. In production `app/entry.py` wires
+`alert_counter=FirestoreCounter(db)` — a second Python object, same Firestore
+"counters" collection `order_ceiling`'s own `FirestoreCounter` already writes to, so
+a key claimed through one is claimed for the other.
+
+**app/entry.py:** `FirestoreOrderStore.record_refund` lost its `alarmed` field and
+the `fire` computation; it always returns the capped entries list now, and never
+returns `None`.
+
+**Failing first:**
+
+    .venv\Scripts\python.exe -m pytest tests/test_daily_alerts.py -q
+    ImportError: cannot import name 'DAILY_PREVIEW_CAP_ALERT_PREFIX' from 'app.core'
+    1 error in 0.90s
+
+After the change:
+
+    .venv\Scripts\python.exe -m pytest tests/test_daily_alerts.py -q
+    11 passed, 2 warnings in 0.95s
+
+Two of the eleven prove the cross-instance property directly, not by reading code:
+`test_two_instances_racing_the_same_days_preview_ceiling_still_page_kevin_once`,
+`test_two_instances_racing_the_same_days_order_ceiling_still_page_kevin_once` and
+`test_two_instances_racing_the_same_days_refund_alarm_still_page_kevin_once` each
+build two separate `Pipeline`s (two separate `OrderStore`s, standing in for two
+Cloud Run containers with nothing else shared) pointed at one shared `alert_counter`,
+drive both past the same day's threshold, and assert the total owner emails across
+BOTH pipelines is exactly one. Each guard also gets its refused/through pair: under
+the ceiling, no alert (`test_the_preview_under_the_daily_ceiling_gets_through_with_
+no_alert`, `test_fewer_than_three_refunds_on_one_instance_still_never_pages_kevin`);
+over it, refused and alerted, with the count in the body
+(`test_the_preview_that_hits_the_daily_ceiling_is_refused_and_pages_kevin_with_
+the_count`). A UTC-day rollover test proves the gate re-arms tomorrow rather than
+silencing the alert forever.
+
+Tests around what this touched, unchanged in behaviour and still green:
+
+    .venv\Scripts\python.exe -m pytest tests/test_daily_stops.py tests/test_credit_exhausted.py tests/test_preview_counting.py tests/test_buy_at_limit.py tests/test_limiter_ipv6.py -q
+    37 passed, 2 warnings in 1.40s
+
+**Local checks** (`.venv\Scripts\python.exe scripts\ci.py`, from inside `wt-71`, using
+`C:\Users\KEVIN\dev\studioface-v2\.venv\Scripts\python.exe` — this worktree has no
+`.venv` of its own):
+
+    863 passed, 158 skipped, 2 warnings in 91.55s
+    WORKFLOW LINT: ok (every workflow can run, every step is mirrored or cloud-only)
+    OK: all assets within limits
+    DESIGN AUDIT: 0 P0, 0 P1, 0 P2
+    SKIP docker build: docker is not on PATH
+    CI MIRROR GATE: green in 194s
+
+**Not run, on purpose:** no real email. `owner_email` in every new test is a fake
+`send_email` list, never `_resend`/Resend — the task forbids sending a real one from
+this run, and the owner-alert path itself was already proven live by task 51 (a real
+`[TEST]` alert delivered, Resend id recorded there). No production request was made
+by this task: nothing here costs money or sends mail.
+
+**Not changed:** colours, fonts, first-screen layout, consent logic, the GA4 id, the
+four delivery prompts, payment provider, hosting, price, permissions in Google Cloud,
+the free-preview limit (`per_client`, `daily_global`'s VALUE — the ceiling itself is
+untouched, only what happens when it fires). No new dependency.
+
+**Pre-existing, not touched by this task:** `app/core.py` (566 lines), `app/main.py`
+(939 lines) and `app/entry.py` (435 lines) were already over the 300-line clutter
+limit before this task changed them — noted, not fixed, since the task asked for one
+thing and splitting any of the three is a separate unit of work with its own review.
+
+**Merge blocked from here:** `main` is checked out in `C:\Users\KEVIN\dev\studioface-v2`,
+so this worktree cannot move it. Committed on `task/71-daily-cap-alert` only. The
+orchestrator merges, pushes `origin main`, and watches the deploy.
+
+## 2026-09-22 (task 72) — two-previews: the free-preview ceiling drops from three to two
+
+Kevin's decision, reversing every earlier brief that said the limit stays at three:
+`RateLimiter.per_client` in `app/guards.py` goes from 3 to 2. Production never
+overrides `per_client` (`app/entry.py`'s `make_limiter` builds `RateLimiter(counter=
+FirestoreCounter(db), salt=s.app_token_secret)`), so this one default is the whole
+production change.
+
+Searched the whole repository for the number pinned elsewhere, not just guards.py:
+- `tests/test_preview_counting.py`: `build()`'s own default went from `per_client=3`
+  to `per_client=2`; `test_the_fourth_successful_preview_inside_the_hour_is_refused`
+  became `test_the_third_successful_preview_inside_the_hour_is_refused` (two
+  successes, third refused, `model.calls == 2`).
+- `tests/test_fal_bill_ceiling.py`: `test_one_client_alone_gets_three` (asserted
+  `rl.per_client == 3` off the untouched default) became
+  `test_one_client_alone_gets_two`; the composition test's "capped at 3" / "3
+  allowed, 97 refused" became "capped at 2" / "2 allowed, 98 refused".
+- `tests/test_limiter_ipv6.py`: left the historical reproduction numbers alone (399
+  addresses, three tries each, 300 previews through — that is what was actually
+  measured before the /64 fix, under the then-current default) but fixed the
+  parenthetical that claimed "RateLimiter.per_client's own default", which is no
+  longer 3, to say "at the time" instead, since the subnet ceiling (20) binds long
+  before per_client does either way.
+- Every visitor-facing Spanish sentence was checked (`frontend/src/components/
+  upload-form.tsx`, `frontend/src/content/ad-pages.ts`, `frontend/src/components/
+  faq.tsx`, and the rest of `frontend/src`) — none of them names the number of free
+  tries. "Has usado tus pruebas gratis de esta hora..." and "Has alcanzado el
+  límite de pruebas gratuitas..." both say "pruebas gratuitas" without a count, so
+  none needed changing, and none was changed.
+- `tests/test_guards_http.py` and `tests/test_money_path.py` also construct a
+  `RateLimiter` with an explicit `per_client=3`, but as an arbitrary local fixture
+  value for a generic mechanism test (subnet/daily caps, webhook idempotency), never
+  asserting on the product's free-preview count — left as is, and the full suite
+  confirms nothing there depended on the changed default.
+
+Failing test first, `tests/test_fal_bill_ceiling.py` (the one that actually reads
+`rl.per_client` off the untouched default rather than an explicit override):
+
+    .venv\Scripts\python.exe -m pytest tests/test_fal_bill_ceiling.py -q
+    AssertionError: assert 3 == 2   (test_one_client_alone_gets_two)
+    AssertionError: assert 3 == 2   (test_a_client_refused_by_its_own_cap_does_not_spend_global_budget)
+    2 failed, 4 passed in 0.25s
+
+After `app/guards.py`'s `per_client: int = 2`:
+
+    .venv\Scripts\python.exe -m pytest tests/test_fal_bill_ceiling.py tests/test_preview_counting.py tests/test_buy_at_limit.py -q
+    17 passed, 2 warnings in 1.07s
+
+The task's own required command:
+
+    .venv\Scripts\python.exe -m pytest tests/test_preview_counting.py tests/test_buy_at_limit.py -q
+    11 passed, 2 warnings in 0.92s
+
+`tests/test_buy_at_limit.py` stayed green throughout — the buy button still appears
+at the limit. No file in it was edited (its `per_client=1`/`per_client=20` fixtures
+never named the product default).
+
+Browser tests (this changes what a visitor sees), after `npm ci` inside this
+worktree's `frontend/` (a fresh worktree has no `node_modules` of its own — install
+from the existing lockfile, no new dependency, nothing added to `package.json`):
+
+    .venv\Scripts\python.exe scripts\run_upload_edges.py
+    20 passed in 66.39s (0:01:06)
+
+`test_the_buy_button_is_visible_and_enabled_at_the_free_preview_limit` and
+`test_reload_at_the_limit_keeps_the_sentence_the_count_and_a_working_buy_button` are
+both in that twenty — the buy button at the limit is a check that looks at what the
+page renders, not a marker in the code.
+
+**Local checks** (`.venv\Scripts\python.exe scripts\ci.py`, from inside `wt-72`, using
+`C:\Users\KEVIN\dev\studioface-v2\.venv\Scripts\python.exe` — this worktree has no
+`.venv` of its own):
+
+    986 passed, 35 skipped, 2 warnings in 103.62s
+    WORKFLOW LINT: ok (every workflow can run, every step is mirrored or cloud-only)
+    OK: all assets within limits
+    DESIGN AUDIT: 0 P0, 0 P1, 0 P2
+    SKIP docker build: docker is not on PATH
+    CI MIRROR GATE: green in 196s
+
+**Not run, on purpose:** no production request. This is a two-line Python default
+plus test text; nothing here touched Stripe, fal, Firestore, or Resend, so nothing
+here could cost money or send email.
+
+**Not changed:** colours, fonts, first-screen layout, consent logic, the GA4 id, the
+four delivery prompts, payment provider, hosting, price, permissions in Google Cloud,
+the buy-at-limit path (still sells with `limited: true`), the sentence "Has usado tus
+pruebas gratis de esta hora..." (names no number, so it did not need to and did not
+change). No new dependency — `npm ci` only materialised the pinned packages already
+in `frontend/package-lock.json`.
+
+**Could not verify:** whether any Google Ads asset outside this repository (ad copy
+already live in the account, not just `docs/ads/rsa.json` and `frontend/src/content/
+ad-pages.ts`) mentions a specific number of free tries — out of reach from this
+worktree, and neither of the two files this repository controls names one.
+
+**Merge blocked from here:** `main` is checked out in `C:\Users\KEVIN\dev\studioface-v2`,
+so this worktree cannot move it. Committed on `task/72-two-previews` only. The
+orchestrator merges, pushes `origin main`, and watches the deploy.
+
+## 2026-09-22 (task 73) — small-hardening: five of seven done, two left undone on purpose
+
+Five changes made, each with a failing-test-first pair in `tests/test_hardening.py`:
+
+1. **Task-token compare** (`/internal/generate`, app/main.py): `x_tasks_token != d.tasks_token`
+   replaced with `hmac.compare_digest(x_tasks_token.encode(), d.tasks_token.encode())`, guarded
+   by `not x_tasks_token` first so a missing header never reaches the compare. Encoded to bytes
+   (not left as `str`) because `compare_digest` raises `TypeError` comparing two `str` unless
+   both are ASCII-only — a hostile header with a non-ASCII byte would have turned a clean 403
+   into an unhandled 500. Twins in tests/test_hardening.py: wrong token refused, real token
+   passes, and a raw Latin-1-encoded non-ASCII header still gets a clean 403.
+2. **Turnstile adapter** (app/adapters/turnstile.py): now catches `httpx.RequestError` (covers
+   timeouts) and raises `TurnstileUnavailable` (new, app/core.py) instead of leaving Cloudflare
+   outages to surface as an uncaught exception; app/main.py's `/api/preview` catches it and
+   answers 503 `turnstile_unavailable` — fails CLOSED, not open, not loud. Also now checks
+   siteverify's `hostname` field against an `expected_hostname` parameter (never a literal), so
+   a token solved on a different site cannot be replayed here. Wired from `app.config.hostname_of`
+   (new helper) off `s.public_url` in production (app/entry.py) and off the funnel's own `base`
+   in the local walk (tests/e2e/funnel_app.py) — so studioface.app and 127.0.0.1 each verify
+   against the host they actually run on. Collateral: tests/test_outfit_audit.py's shared httpx
+   stub had to gain a `hostname` field or its 8 tests would refuse a token that had always been
+   accepted before this check existed — fixed.
+3. **`/health` drops `killswitch`**, keeps `owner_alerts`, `ok`, `stripe_mode`, `stripe_price_live`.
+   tests/test_health.py updated (positive regression test that the key is absent in both states
+   of the store, not just its default). scripts/check.py unaffected (reads stripe_mode /
+   stripe_price_live only). **Flagged, not fixed:** `killswitch` is also read from `/health` by
+   `frontend/src/components/upload-form.tsx` (the "shop paused" banner — degrades to a wasted
+   click, not a money risk, the server still 503s the real request), `scripts/verify_production.py`
+   `check_health()` (the CI deploy gate's own kill-switch check, used by `deploy.yml`), and
+   `scripts/go_live.py` `check_production()`. None of the three crash on the field's absence —
+   each just silently reads it as "off" from now on. The task's own watch-out only anticipated
+   the `owner_alerts` conflict; this one is new. Left for Kevin/orchestrator to decide whether
+   those three should read the kill switch some other way.
+5. **`PAID_STATUS` deleted** (app/main.py) — assigned once, read nowhere; confirmed with a repo-
+   wide grep before deleting.
+6. **`refund.updated` / `refund.failed` now act only on Stripe's three terminal refund statuses**
+   (`succeeded`, `failed`, `canceled`) instead of writing `failed_refund_failed` for anything that
+   was not literally `succeeded` — which previously mis-marked an in-progress `pending` or
+   `requires_action` refund.updated as failed. Stripe's Refund object documents five statuses;
+   see docs/verified.md 2026-09-22 for the exact wording and both URLs read.
+7. Compare_digest twins done as part of #1 above (the only comparison touched this task —
+   `preview_token`/`delivery_token` compares elsewhere in app/main.py already used
+   `hmac.compare_digest` before this task and were not touched).
+
+**Left undone, on purpose — both real reasons found by reading the code, not guessed:**
+
+- **#4, the dead route** (`/api/orders/{order_id}/{token}`) and its planned update to
+  `scripts/make_demo_assets.py`: NOT deleted. Its own docstring says it is "kept only for links
+  already sent to a customer's inbox before task 31"; `tests/test_gallery_key_out_of_address.py`
+  (`test_the_old_path_route_still_works_for_links_already_sent`,
+  `test_the_old_path_route_still_refuses_a_bad_token`) and `tests/test_after_payment.py` (four
+  more tests) exercise it directly and would have needed rewriting to remove it; and
+  `scripts/make_demo_assets.py` line 338 calls this exact route against live production
+  (`https://api.studioface.app/api/orders/{order_id}/{token}`) to confirm a demo order delivered.
+  The product is about a week old (task 31 landed days ago), so "old links" are not remotely
+  "genuinely dead" yet by any reasonable reading. Deleting it would be a customer-facing break,
+  not a monitoring blind spot — a materially different risk from anything else in this task.
+
+**Evidence:**
+
+    .venv\Scripts\python.exe -m pytest tests/test_hardening.py -q
+    11 passed
+
+    .venv\Scripts\python.exe -m pytest tests/test_health.py tests/test_guards_http.py
+        tests/test_money_path.py tests/test_refund_status.py tests/test_after_payment.py
+        tests/test_gallery_key_out_of_address.py tests/test_refund_reconciliation.py -q
+    73 passed
+
+    .venv\Scripts\python.exe -m pytest tests/ -q
+    874 passed, 158 skipped
+
+    .venv\Scripts\python.exe scripts\ci.py
+    CI MIRROR GATE: green in 189s
+
+    .venv\Scripts\python.exe scripts\run_upload_edges.py   (real browser, Playwright)
+    20 passed in 68.64s
+
+Before-fix (RED) evidence: `git stash` of every implementation file with
+`tests/test_hardening.py` left in place made the whole file fail to even collect
+(`ImportError: cannot import name 'TurnstileUnavailable' from 'app.core'`) — pasted in full in
+the task's own report.
+
+**Not run, on purpose:** no production request; nothing here touched Stripe, fal, or Resend, so
+nothing here could cost money or send email.
+
+**Not changed:** colours, fonts, first-screen layout, consent logic, the GA4 id, the four
+delivery prompts, payment provider, hosting, price, permissions in Google Cloud, the free-preview
+limit (still two). No new dependency.
+
+**Merge blocked from here:** `main` is checked out in `C:\Users\KEVIN\dev\studioface-v2`, so this
+worktree cannot move it. Committed on `task/73-small-hardening` only. The orchestrator merges,
+pushes `origin main`, and watches the deploy.
+## 2026-09-22 (task 74) — mirror-redacts-owner: the owner's own address no longer reaches the public mirror
+
+Nine tracked occurrences of `OWNER_EMAIL_REDACTED` (HANDOFF.md twice,
+RUN-ME-FIRST.md, docs/verified.md, scripts/make_demo_assets.py,
+tests/test_bootstrap.py four times), all five files going into the public mirror
+today — live exposure, not a hypothetical.
+
+Added it to `REDACTIONS` in `scripts/make_public_mirror.py`, not `FORBIDDEN`: the
+address is supposed to live in this private repository (ordinary docs, a demo
+constant, a test fixture); it is not a leaked credential, and `FORBIDDEN` prints
+"ROTATE THE ORIGINAL IF REAL" and exits 3, which would make every future mirror
+refresh cry wolf over a value that was never wrong to have here. `REDACTIONS`
+substitutes it quietly, the same tier as the order ids and gallery tokens already
+there. Replacement text: `OWNER_EMAIL_REDACTED`.
+
+Two things the first version of the fix got wrong, both caught by running the mirror
+end to end rather than trusting the regex:
+1. A `\b` word-boundary anchor in front of the pattern silently missed two of the
+   four occurrences in `tests/test_bootstrap.py`, where the address sits right after
+   a literal `
+` inside a Python string (two addresses joined by that escape,
+   the owner's being the second) — the `n` from `
+` and the `k` starting the address are both word
+   characters, so there is no boundary between them. Dropped the anchors; the
+   pattern is `re.escape()` of the full literal address, matched anywhere.
+2. `scripts/make_public_mirror.py` is itself a tracked file with no `DROP_PATTERNS`
+   / `DROP_DIRECTORIES` rule excluding it, so it is copied into the public mirror
+   too — and the first version of the fix spelled the address out as one
+   contiguous substring inside its own regex literal, which would have shipped the
+   address in the mirror regardless of the redaction working everywhere else. Fixed
+   by building the pattern at import time from two split literals
+   (`"kevinleon" + "jouvin" + "@gmail.com"`) so the script's own source text never
+   carries the address as one readable run of characters.
+
+Failing test first, `tests/test_make_public_mirror.py` (new file — no prior tests
+covered this script; placed alongside the sibling `tests/test_demo_assets.py`,
+which uses the same `importlib.util.spec_from_file_location` pattern to load a
+`scripts/` module without a package):
+
+    .venv\Scripts\python.exe -m pytest tests/test_make_public_mirror.py -v
+    test_owner_email_is_redacted FAILED — OWNER_EMAIL_REDACTED still in output
+    test_owner_email_is_quiet_not_forbidden FAILED — same
+    2 failed, 1 passed in 0.77s
+
+After adding the `REDACTIONS` entry:
+
+    .venv\Scripts\python.exe -m pytest tests/test_make_public_mirror.py -v
+    5 passed in 0.10s
+
+(Two more cases were added at the same time the `\b` bug was found: one proving the
+address is caught even directly after a literal `\n`, one reading
+`scripts/make_public_mirror.py`'s own source and asserting the address never
+appears there as one substring — both red before the two fixes above, green after.)
+
+Ran the mirror for real, into a scratch directory outside this worktree (each run
+uses a fresh, never-reused path — the target must not already exist or be non-empty,
+and `rm -rf` on a stale one is blocked by this machine's irreversible-command hook):
+
+    .venv\Scripts\python.exe scripts\make_public_mirror.py "$TEMP/mirror-check-74b-<ts>"
+    copied 453 files to ...
+    CLEAN
+
+    cd $TEMP/mirror-check-74b-<ts> && grep -rn <the owner's address> .
+    (no output)
+    grep exit code: 1
+
+`CLEAN` (exit 0, no `FORBIDDEN` findings) confirms the address is redacted quietly,
+not reported as a rotate-worthy secret. Zero grep hits in the refreshed local
+snapshot confirms the redaction actually reaches the copied files, not just the
+unit test.
+
+`tests/test_source_scanners.py` (the meta-test that fails a test file for scanning
+`scripts/`/`app/`/`frontend/` source without stripping comments first, to stop a
+scanner from matching its own explanatory prose) flagged the new test file, because
+it reads `make_public_mirror.py` in full. That flag is right in general and wrong
+here: this test deliberately reads the whole file, comments included, because that
+is exactly what the mirror copies byte for byte — a leak sitting in a comment would
+be exactly as real as one sitting in code, and stripping comments first would hide
+it. Added `test_make_public_mirror.py` to that meta-test's documented exempt set
+with the reason above, the same mechanism already used for a dozen other tests that
+read built or generated artefacts rather than annotated source.
+
+**Local checks** (`.venv\Scripts\python.exe scripts\ci.py`, from inside `wt-74`,
+using `C:\Users\KEVIN\dev\studioface-v2\.venv\Scripts\python.exe` — this worktree
+has no `.venv` of its own):
+
+    CI MIRROR GATE: green in 184s
+
+**The check this task exists to satisfy** —
+
+    (the check greps a clone of the public mirror for the owner's address and
+    passes only when git grep finds nothing; the pattern is not spelled here, for
+    the same reason the mirror script splits it in its own source)
+
+— greps a git clone of the *published* public mirror at
+`..\studioface-v2-mirror-check`, relative to the repository root. That clone does
+not exist yet from here: the mirror the public repository serves is only refreshed
+from `main`, and this branch cannot merge to `main` from this worktree (see below).
+So the code half and the test half are both done and both green, but this specific
+check cannot pass from this worktree — it needs a mirror refresh and a fresh clone
+that only exist after the merge. That refresh and clone, and the resulting run of
+this exact command, are the orchestrator's step.
+
+**Not changed:** colours, fonts, first-screen layout, consent logic, the GA4 id, the
+four delivery prompts, payment provider, hosting, price, permissions in Google
+Cloud, the free-preview limit. No new dependency. Nothing here touches production,
+costs money, or sends email — `make_public_mirror.py` only reads tracked files and
+writes to a local target directory.
+
+**Merge blocked from here:** `main` is checked out in
+`C:\Users\KEVIN\dev\studioface-v2`, so this worktree cannot move it. Committed on
+`task/74-mirror-redacts-owner` only. The orchestrator merges, pushes `origin main`,
+refreshes the public mirror, clones it to `..\studioface-v2-mirror-check`, and runs
+the check above.

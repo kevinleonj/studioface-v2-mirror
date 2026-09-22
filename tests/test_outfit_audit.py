@@ -81,13 +81,19 @@ def _storage_doubles(objects: dict):
 
 
 class _Response:
-    """Turnstile says yes, GA4 accepts, and fal's result file downloads."""
+    """Turnstile says yes, GA4 accepts, and fal's result file downloads.
+
+    `hostname` matches ENV["PUBLIC_URL"] below (studioface.app): task 73 made
+    app.adapters.turnstile check Cloudflare's siteverify `hostname` field against the
+    site's own host, so a canned success with no `hostname` at all now reads as a
+    token solved on a different site and is correctly refused. GA4 and fal ignore the
+    extra key."""
 
     status_code = 200
     content = b"\xff\xd8jpeg"
 
     def json(self) -> dict:
-        return {"success": True}
+        return {"success": True, "hostname": "studioface.app"}
 
 
 def _fal_double(captured: list) -> types.ModuleType:

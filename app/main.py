@@ -26,9 +26,11 @@ from starlette.middleware.gzip import GZipMiddleware
 from app.core import (
     GALLERY_BASE,
     REFUND_CONFIRMED,
+    REFUND_FAILED,
     ModelRefused,
     Order,
     Pipeline,
+    TurnstileUnavailable,
     delivery_token,
     preview_token,
     verify_stripe_signature,
@@ -65,12 +67,6 @@ THANKS_PATH = "/api/gracias"
 # Stripe Checkout Session ids. Minting a token for anything else would widen this
 # route from "the order namespace" to "any string".
 SESSION_ID_PREFIX = "cs_"
-
-# The only Stripe value that proves this one-time session was paid. Its siblings are
-# `unpaid` and `no_payment_required`; the latter belongs to `setup` mode and to
-# billing-cycle anchors, neither of which this product uses, so accepting it here would
-# be a free gallery. Stripe's own object reference, docs/verified.md 19 Sep.
-PAID_STATUS = "paid"
 
 # Cache policy. Starlette's StaticFiles sets etag and last-modified and nothing else —
 # it has no code path that emits cache-control — and production was measured serving
@@ -264,6 +260,11 @@ class Deps:
     # Task 21: what Stripe itself says about the configured price's livemode, read once
     # at startup by app.entry._price_is_live. False on any missing config or failure.
     stripe_price_live: bool = False
+    # Task 51: whether OWNER_ALERT_EMAIL is configured, never the address itself.
+    # app.entry.build() derives this from Settings.owner_alert_email being non-empty.
+    # A survives-the-killswitch-removal field: reported on its own, not nested under
+    # or gated by killswitch, so it keeps working after a later task drops that field.
+    owner_alerts: bool = False
 
 
 def make_app(
@@ -288,6 +289,7 @@ def make_app(
     stripe_mode: str = "unknown",
     stripe_price_live: bool = False,
     resign_preview: Callable[[str], str | None] = lambda batch: None,
+    owner_alerts: bool = False,
 ) -> FastAPI:
     d = Deps(
         pipeline,
@@ -306,6 +308,7 @@ def make_app(
         gallery_base,
         stripe_mode,
         stripe_price_live,
+        owner_alerts,
     )
     # F8/O9. /docs, /redoc and /openapi.json publish every route, parameter and
     # response shape of the money path - including /internal/generate/{order_id} and
@@ -393,6 +396,30 @@ def xff_shape(x_forwarded_for: str) -> str:
     return f"entries={n} first={first} last={last} first_eq_last={comparable and first == last}"
 
 
+def _note_daily_cap(d: Deps, why: str) -> None:
+    """Task 71: the one RateLimiter refusal reason that is about the WHOLE shop,
+    not one visitor. Under paid traffic, `daily_cap` means ads are still spending
+    while StudioFace has quietly stopped serving previews — everything else
+    (`client_cap`, `subnet_cap`) is one visitor or one network hitting their own
+    ceiling, which is working as intended and needs nobody told."""
+    if why == "daily_cap":
+        d.pipeline.note_daily_preview_cap(d.limiter.daily_global)
+
+
+async def _require_turnstile(d: Deps, form, ip: str) -> None:
+    """Raises on refusal, returns on success. A Turnstile outage is not a bad token:
+    refuse to guess either way. Letting every visitor through would defeat the check
+    on the one route that gates who can spend a try; a 403 here would be
+    indistinguishable from a genuinely bad token and would silently refuse every
+    visitor for as long as Cloudflare is down. 503 says plainly what happened."""
+    try:
+        turnstile_ok = d.verify_turnstile(str(form.get("turnstile_token", "")), ip)
+    except TurnstileUnavailable as exc:
+        raise HTTPException(503, "turnstile_unavailable") from exc
+    if not turnstile_ok:
+        raise HTTPException(403, "turnstile")
+
+
 def _register_preview(app: FastAPI, d: Deps) -> None:
     @app.post("/api/preview")
     async def preview(request: Request, x_forwarded_for: str = Header(default="")):
@@ -409,8 +436,7 @@ def _register_preview(app: FastAPI, d: Deps) -> None:
             raise HTTPException(503, "paused")
         ip = visitor_address(x_forwarded_for, request)
         form = await request.form()
-        if not d.verify_turnstile(str(form.get("turnstile_token", "")), ip):
-            raise HTTPException(403, "turnstile")
+        await _require_turnstile(d, form, ip)
         files = [await f.read() for f in form.getlist("files")]
         try:
             v = validate_uploads(files)
@@ -435,6 +461,7 @@ def _register_preview(app: FastAPI, d: Deps) -> None:
 
         ok, why = d.limiter.check(ip, user_agent)
         if not ok:
+            _note_daily_cap(d, why)
             # Storage is cheap but not free, so this fallback has its own ceiling
             # (RateLimiter.check_store, 10/visitor/hour) checked inside
             # _stored_handle. Only once THAT is also spent does a visitor at the
@@ -704,11 +731,22 @@ def _order_status_payload(d: Deps, order_id: str, token: str) -> dict:
 def _register_public(app: FastAPI, d: Deps) -> None:
     @app.get(HEALTH_PATH)
     def health():
+        # killswitch stays, and the reason is the page, not this handler. The hardening
+        # task dropped it on the argument that a health check is no place for a mutable
+        # operational flag a stranger can read for free. True in general, but false
+        # here: frontend/src/components/upload-form.tsx reads exactly this field to show
+        # "Estamos sin capacidad ahora mismo" and hide the buy button while the shop is
+        # paused. Drop it and that banner never fires, so a visitor meets a normal-looking
+        # shop, picks photos, and only discovers the shop stopped at the buy step. The
+        # paused state is already public by design — the page tells every visitor — so
+        # hiding it here protects nothing and costs the honest warning. Kevin's call,
+        # asked and answered on 22 Sep 2026.
         return {
             "ok": True,
             "killswitch": d.pipeline.store.killswitch,
             "stripe_mode": d.stripe_mode,
             "stripe_price_live": d.stripe_price_live,
+            "owner_alerts": d.owner_alerts,
         }
 
     @app.post("/api/stripe/webhook")
@@ -738,7 +776,16 @@ def _register_public(app: FastAPI, d: Deps) -> None:
 def _register_internal(app: FastAPI, d: Deps) -> None:
     @app.post("/internal/generate/{order_id}")
     def generate(order_id: str, x_tasks_token: str = Header(default="")):
-        if x_tasks_token != d.tasks_token:
+        # Constant-time on purpose: this guards the only route that can start a paid
+        # generation, and `!=` on a secret leaks its length and a byte-at-a-time signal
+        # through response timing. Encoded to bytes first so a hostile header full of
+        # non-ASCII cannot turn a 403 into a 500 — hmac.compare_digest refuses to
+        # compare two `str` unless both are ASCII-only, but raises no such restriction
+        # on `bytes`. The empty-string check comes first so a missing header (the
+        # Header(default="") case) never reaches the compare at all.
+        if not x_tasks_token or not hmac.compare_digest(
+            x_tasks_token.encode(), d.tasks_token.encode()
+        ):
             raise HTTPException(403)
         order = d.pipeline.run(order_id)
         if order.status == "generating":  # should not happen; make Tasks retry
@@ -788,6 +835,15 @@ HANDLERS = {
     REFUND_SETTLED: "_handle_refund",
     REFUND_FAILED_EVENT: "_handle_refund",
 }
+
+# refund.updated fires on every change to a Refund object, not only the ones that
+# settle it - Stripe's own object reference lists five statuses: pending,
+# requires_action, succeeded, failed, canceled (docs/verified.md, 2026-09-22). Only
+# the last three are terminal; `pending` and `requires_action` can still change. A
+# refund.updated carrying `pending` used to be written straight into
+# failed_refund_failed by the `else` branch below - telling a customer their refund
+# had failed while Stripe was still moving the money.
+FINAL_REFUND_STATUSES = (REFUND_CONFIRMED, REFUND_FAILED, "canceled")
 
 
 def _handle_event(d: Deps, event: dict) -> dict:
@@ -871,6 +927,15 @@ def _handle_refund(d: Deps, event: dict) -> dict:
     The alternative is a Firestore query and index on refund_id for something the payload
     already carries."""
     refund = event["data"]["object"]
+    status = refund.get("status")
+    if status not in FINAL_REFUND_STATUSES:
+        # `pending` or `requires_action`: the refund is still moving. Writing a
+        # terminal order status now would be a guess, and the wrong one - the order
+        # already reads failed_refund_pending from the original refund request, which
+        # is still true. The FINAL refund.updated (or refund.failed) for this same
+        # refund arrives as a later, separate event.
+        logger.info("refund event not yet final refund_id=%s status=%s", refund.get("id"), status)
+        return {"settling": status}
     order_id = (refund.get("metadata") or {}).get("order_id", "")
     order = d.pipeline.store.get(order_id) if order_id else None
     if order is None:
@@ -880,10 +945,8 @@ def _handle_refund(d: Deps, event: dict) -> dict:
         return {"ignored": True}
     if not d.pipeline.store.claim_event(event["id"]):
         return {"duplicate": True}
-    order.refund_status = refund.get("status")
-    order.status = (
-        "failed_refunded" if order.refund_status == REFUND_CONFIRMED else "failed_refund_failed"
-    )
+    order.refund_status = status
+    order.status = "failed_refunded" if status == REFUND_CONFIRMED else "failed_refund_failed"
     d.pipeline.store.put(order)
     logger.info(
         "refund settled order_id=%s refund_id=%s status=%s order_status=%s",

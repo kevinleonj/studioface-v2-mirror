@@ -57,9 +57,9 @@ def test_no_number_of_clients_gets_more_than_the_daily_global_out_of_fal():
     assert flood(rl, subnets=40, ips_each=10, tries_each=5) == 300
 
 
-def test_one_client_alone_gets_three():
+def test_one_client_alone_gets_two():
     rl = limiter(lambda: 0.0)
-    assert flood(rl, subnets=1, ips_each=1, tries_each=50) == rl.per_client == 3
+    assert flood(rl, subnets=1, ips_each=1, tries_each=50) == rl.per_client == 2
 
 
 def test_one_subnet_alone_gets_twenty_however_many_addresses_it_rotates_through():
@@ -73,13 +73,13 @@ def test_one_subnet_alone_gets_twenty_however_many_addresses_it_rotates_through(
 
 def test_a_client_refused_by_its_own_cap_does_not_spend_global_budget():
     """guards.RateLimiter says narrow ceilings are checked first so a rejected client
-    never consumes global budget. If that were wrong, an attacker capped at 3 could
+    never consumes global budget. If that were wrong, an attacker capped at 2 could
     still burn all 300 global slots and deny previews to everyone else."""
     clock = lambda: 0.0  # noqa: E731
     rl = limiter(clock)
     for _ in range(100):
-        rl.check("10.0.0.1", "ua")  # 3 allowed, 97 refused at the client ceiling
-    assert rl.counter.store[f"g:{int(0 // DAY)}"][0] == 3
+        rl.check("10.0.0.1", "ua")  # 2 allowed, 98 refused at the client ceiling
+    assert rl.counter.store[f"g:{int(0 // DAY)}"][0] == 2
 
 
 def test_the_ceiling_is_per_utc_day_and_starts_again_the_next_one():

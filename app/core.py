@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import Protocol
 
-from app.guards import DailyOrderCeiling, build_prompt
+from app.guards import Counter, DailyOrderCeiling, MemoryCounter, build_prompt
 from app.logs import id_prefix
 
 logger = logging.getLogger(__name__)
@@ -59,6 +59,16 @@ class BillingRefused(Exception):
     or error `type` for it, so the detection there is a heuristic."""
 
 
+class TurnstileUnavailable(Exception):
+    """Cloudflare's siteverify endpoint timed out or could not be reached at all.
+
+    This guard sits on the money path (/api/preview, before a visitor can ever reach
+    checkout), so a Turnstile outage must fail CLOSED — refuse the preview with a 503
+    a real visitor can be told about — rather than either letting everyone through
+    (fail open, the thing this whole check exists to stop) or falling through to an
+    unhandled 500 (which is what an uncaught network error did before this)."""
+
+
 # o= and t= are appended as a FRAGMENT (#o=...&t=...), not a query, so the static
 # export needs one /g/ page and the key is never sent to any server (task 31).
 GALLERY_BASE = "https://studioface.app/g/"
@@ -73,6 +83,11 @@ OWNER_ALERT_PREFIX = "OWNER_ALERT:"
 # import into this no-cloud-SDK module).
 DAILY_CEILING_ALERT_PREFIX = "OWNER_ALERT_CEILING:"
 REFUND_ALARM_PREFIX = "OWNER_ALERT_REFUNDS:"
+# Task 71, daily-cap-alert: the free-preview ceiling (RateLimiter.daily_global) used
+# to fire silently -- under paid ad traffic that means ads keep spending while the
+# shop has quietly stopped serving previews, with nobody told. Same sentinel
+# convention as the other two OWNER_ALERT_* prefixes above.
+DAILY_PREVIEW_CAP_ALERT_PREFIX = "OWNER_ALERT_PREVIEW_CAP:"
 # Refunded orders in one UTC day that pages Kevin once -- a signal to go look, not to
 # stop selling (Pipeline._tally_refund below never touches the kill switch).
 REFUND_ALARM_THRESHOLD = 3
@@ -202,8 +217,18 @@ class OrderStore:
         # alarm can name which orders it is about. FirestoreOrderStore below keeps
         # the same shape in one Firestore transaction per call, same pattern as
         # claim_event's AlreadyExists gate just above.
+        #
+        # Task 71: this dict used to be paired with a `_refund_alarmed: set[str]`
+        # here that decided "have I already emailed Kevin about today's refunds" --
+        # a plain Python set living in ONE process. Cloud Run runs many instances and
+        # replaces them freely, so that set was never shared and never survived a
+        # restart: two instances could each independently reach the threshold and
+        # each send its own alert, or a restart could forget the alert had already
+        # fired. That decision now lives in Pipeline._alert_once, backed by the same
+        # atomic, cross-instance Counter the ceilings already use -- this dict keeps
+        # doing only what it is good at, remembering WHICH orders to name in the
+        # email body, never WHETHER to send it.
         self._refund_tally: dict[str, list[tuple[str, str]]] = {}
-        self._refund_alarmed: set[str] = set()
 
     def claim_event(self, event_id: str) -> bool:
         """Idempotency gate. Firestore: create() on doc id -> AlreadyExists."""
@@ -218,18 +243,15 @@ class OrderStore:
     def get(self, order_id: str) -> Order | None:
         return self._orders.get(order_id)
 
-    def record_refund(self, order_id: str, reason: str, day: str) -> list[tuple[str, str]] | None:
-        """Append one refunded order to today's tally. Returns the day's first
-        REFUND_ALARM_THRESHOLD entries the MOMENT the count first reaches that
-        threshold, so the caller (Pipeline._tally_refund) sends exactly one alert;
-        None before that moment and after it (never a second list for the 4th,
-        5th, ... refund of the same day)."""
+    def record_refund(self, order_id: str, reason: str, day: str) -> list[tuple[str, str]]:
+        """Append one refunded order to today's tally and hand back the day's first
+        REFUND_ALARM_THRESHOLD entries, every time -- whether this is the 1st refund
+        of the day or the 50th. This method only ever answers "what happened
+        today"; whether THIS call is the one that pages Kevin is decided by the
+        caller (Pipeline._tally_refund), atomically, via Pipeline._alert_once."""
         entries = self._refund_tally.setdefault(day, [])
         entries.append((order_id, reason))
-        if len(entries) >= REFUND_ALARM_THRESHOLD and day not in self._refund_alarmed:
-            self._refund_alarmed.add(day)
-            return list(entries[:REFUND_ALARM_THRESHOLD])
-        return None
+        return list(entries[:REFUND_ALARM_THRESHOLD])
 
     def find_by_email(self, email: str) -> list[Order]:
         """Only used to resend a delivery link to the buyer's own address."""
@@ -293,6 +315,47 @@ class Pipeline:
     # (or any test that does not care about this stop) simply never refuses an order
     # for being over a ceiling, same convention as owner_email=None above.
     order_ceiling: DailyOrderCeiling | None = None
+    # Task 71: the once-per-UTC-day gate for every owner alert below (the paid-order
+    # ceiling, the free-preview ceiling, the refund-rate alarm) -- the same shared
+    # Counter type order_ceiling uses above, atomic across every Cloud Run instance
+    # in production (Firestore transaction). Defaults to a fresh, process-local
+    # MemoryCounter rather than None: unlike owner_email/order_ceiling, "no gate at
+    # all" is never a safe default for something that decides whether Kevin gets
+    # paged once or many times, so a deployment that forgets to wire this still gets
+    # correct once-per-day behaviour for its own instance, and app/entry.py wires the
+    # real Firestore-backed one shared with order_ceiling and the preview limiter.
+    alert_counter: Counter = field(default_factory=MemoryCounter)
+
+    def _alert_once(self, key: str) -> bool:
+        """True the first, and only the first, time this key is claimed today.
+
+        Backed by `Counter.increment_if_below(key, limit=1, ttl_s)` -- a
+        check-and-increment inside one Firestore transaction in production, the
+        exact mechanism DailyOrderCeiling and RateLimiter already trust for money.
+        Of any number of Cloud Run instances racing on the same key in the same
+        instant, exactly one call returns True; every other one, on this instance or
+        any other, returns False. This is why it replaces a read-then-write: a read
+        and a later write are two separate operations, and two instances can each do
+        the read half before either does the write half, so a check like "does this
+        document already say alarmed" can still be True for both of them.
+        """
+        return self.alert_counter.increment_if_below(key, 1, 86400)
+
+    def note_daily_preview_cap(self, limit: int) -> None:
+        """RateLimiter.check (app/guards.py) just refused a free preview for
+        `daily_global` -- called from app/main.py's /api/preview the moment that
+        happens. Under paid ad traffic this is the alert that matters most: the shop
+        has quietly stopped serving previews while the ads that sent the traffic
+        keep spending, and until now nothing told Kevin. Pages him once per UTC day,
+        with the count, so he can pause ads; never touches the kill switch -- a
+        preview costs nothing, so this is not a money stop like the order ceiling.
+        """
+        if not self.owner_email:
+            return
+        day = str(int(self.now() // 86400))
+        if not self._alert_once(f"alert:preview_cap:{day}"):
+            return
+        self.send_email(self.owner_email, f"{DAILY_PREVIEW_CAP_ALERT_PREFIX}{limit}")
 
     def run(self, order_id: str) -> Order:
         order = self.store.get(order_id)
@@ -389,10 +452,18 @@ class Pipeline:
         pages Kevin once, the moment the day's count first reaches
         REFUND_ALARM_THRESHOLD. Never touches the kill switch: three refunds is
         worth a look, not proof the shop should stop selling.
+
+        Task 71: "the day's count first reaches the threshold" used to be decided by
+        `store.record_refund` itself, with an in-process set (OrderStore's old
+        `_refund_alarmed`) that a second Cloud Run instance never saw. The tally
+        (which orders to name) still lives on the store; whether THIS call is the
+        one that emails Kevin is now `_alert_once`, atomic across instances.
         """
         day = str(int(self.now() // 86400))
         entries = self.store.record_refund(order.id, reason, day)
-        if entries is None or not self.owner_email:
+        if len(entries) < REFUND_ALARM_THRESHOLD or not self.owner_email:
+            return
+        if not self._alert_once(f"alert:refunds:{day}"):
             return
         named = ",".join(f"{id_prefix(oid)}:{r}" for oid, r in entries)
         self.send_email(self.owner_email, f"{REFUND_ALARM_PREFIX}{named}")
@@ -432,12 +503,18 @@ class Pipeline:
         False: today's ceiling is already spent. Stripe has already taken this
         order's money, so there is nothing left to "refuse" except generating it:
         this refunds it through the exact same path and customer email as any other
-        undeliverable order, then — the same off-to-on transition
-        _handle_credit_exhausted uses above — kills the switch (closing
-        /api/checkout and /api/preview to every order after this one) and pages
-        Kevin once, so a human raises the ceiling or resets the switch on purpose
-        rather than the shop grinding through the rest of the day on someone's ad
-        budget.
+        undeliverable order, then kills the switch (closing /api/checkout and
+        /api/preview to every order after this one) and pages Kevin once per UTC
+        day, so a human raises the ceiling or resets the switch on purpose rather
+        than the shop grinding through the rest of the day on someone's ad budget.
+
+        Task 71: the owner alert used to be gated on the kill switch's own
+        off-to-on transition (`self.store.killswitch`, a plain Firestore read then a
+        plain write in production, not a transaction) — two instances racing the
+        21st order in the same instant could both read it "off" and both email
+        Kevin. It is now `_alert_once`, the same atomic Counter every other alert in
+        this file uses; the kill switch itself is unchanged, still set True every
+        time so the shop stays closed until Kevin resets it by hand.
 
         No order_ceiling configured (None, the default): always admits — same
         convention as owner_email=None.
@@ -454,7 +531,8 @@ class Pipeline:
             self.order_ceiling.limit,
             already_on,
         )
-        if not already_on and self.owner_email:
+        day = str(int(self.now() // 86400))
+        if self.owner_email and self._alert_once(f"alert:daily_ceiling:{day}"):
             self.send_email(
                 self.owner_email, f"{DAILY_CEILING_ALERT_PREFIX}{self.order_ceiling.limit}"
             )

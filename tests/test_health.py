@@ -32,7 +32,7 @@ DEPLOY_YML = ROOT / ".github" / "workflows" / "deploy.yml"
 RESERVED_BY_GOOGLE_FRONTEND = {"/healthz"}
 
 
-def build(static_dir=None, stripe_mode="unknown", stripe_price_live=False):
+def build(static_dir=None, stripe_mode="unknown", stripe_price_live=False, owner_alerts=False):
     store = OrderStore()
     pipeline = Pipeline(
         store=store,
@@ -53,6 +53,7 @@ def build(static_dir=None, stripe_mode="unknown", stripe_price_live=False):
         static_dir=static_dir,
         stripe_mode=stripe_mode,
         stripe_price_live=stripe_price_live,
+        owner_alerts=owner_alerts,
     )
     return TestClient(app), store
 
@@ -75,18 +76,25 @@ def test_health_responds():
         "killswitch": False,
         "stripe_mode": "unknown",
         "stripe_price_live": False,
+        "owner_alerts": False,
     }
 
 
-def test_health_reports_the_killswitch():
+def test_health_reports_the_killswitch_because_the_page_reads_it():
+    """The hardening task dropped this field, arguing a health check is no place for a
+    mutable operational flag a stranger can read for free. Kevin reversed that on 22 Sep
+    2026, for a concrete reason: frontend/src/components/upload-form.tsx reads exactly
+    this field to show "Estamos sin capacidad ahora mismo" and hide the buy button while
+    the shop is paused. Without it the banner never fires and a visitor meets a
+    normal-looking shop, picks photos, and only learns the shop stopped at the buy step.
+
+    Both states are asserted, so this cannot pass by accident of a falsy default: the one
+    that must get through (paused, and the page is told) and the one that must be refused
+    (not paused, and the page is not told to hide anything)."""
     c, store = build()
+    assert c.get(HEALTH_PATH).json()["killswitch"] is False
     store.killswitch = True
-    assert c.get(HEALTH_PATH).json() == {
-        "ok": True,
-        "killswitch": True,
-        "stripe_mode": "unknown",
-        "stripe_price_live": False,
-    }
+    assert c.get(HEALTH_PATH).json()["killswitch"] is True
 
 
 def test_health_reports_the_stripe_mode():
@@ -114,6 +122,21 @@ def test_health_reports_stripe_price_live_false():
     hard-coded to True and still pass."""
     c, _ = build(stripe_price_live=False)
     assert c.get(HEALTH_PATH).json()["stripe_price_live"] is False
+
+
+def test_health_reports_owner_alerts_true():
+    """Task 51, twin one of two: an address is configured, so the alert can send —
+    reported here, never the address itself."""
+    c, _ = build(owner_alerts=True)
+    assert c.get(HEALTH_PATH).json()["owner_alerts"] is True
+
+
+def test_health_reports_owner_alerts_false():
+    """Twin two of two: identical wiring, the other bool, so this field cannot be
+    hard-coded to True and still pass — the exact state OWNER_ALERT_EMAIL being
+    unset in GitHub Actions left production in before task 51."""
+    c, _ = build(owner_alerts=False)
+    assert c.get(HEALTH_PATH).json()["owner_alerts"] is False
 
 
 def test_the_old_reserved_path_is_gone_rather_than_left_as_a_decoy():

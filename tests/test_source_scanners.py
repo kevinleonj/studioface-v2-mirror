@@ -208,6 +208,11 @@ def test_tests_that_scan_product_source_strip_comments_first():
         # test_legal_identity.py and test_ad_landing_pages.py above: rendered HTML
         # carries no source comments to strip.
         "test_return_policy.py",
+        # Task 74. Reads scripts/make_public_mirror.py whole, comments included, on
+        # purpose: that file ships byte for byte into the public mirror, so a leak
+        # sitting in a comment is exactly as real as one sitting in code. Stripping
+        # comments first would hide the failure this test exists to catch.
+        "test_make_public_mirror.py",
     }
     sources = re.compile(r'"(?:app|scripts|frontend)"|/\s*"src"|"(?:tsx|py)"')
     offenders = []

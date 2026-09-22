@@ -50,6 +50,7 @@ import httpx
 
 from app.adapters.fal import FalModel
 from app.adapters.turnstile import verify_turnstile
+from app.config import hostname_of
 from app.core import OrderStore, Pipeline
 from app.guards import MemoryCounter, RateLimiter
 from app.main import THANKS_PATH, make_app
@@ -239,7 +240,9 @@ def build_funnel_app(static_dir: Path, storage_dir: Path, base: str) -> Any:
         store_sources_fn=preview.store_only,
         webhook_secret=os.environ["STRIPE_WEBHOOK_SECRET"],
         tasks_token=tasks,
-        verify_turnstile=lambda token, ip: verify_turnstile(turnstile, token, ip),
+        verify_turnstile=lambda token, ip: verify_turnstile(
+            turnstile, token, ip, hostname_of(base)
+        ),
         retrieve_session=_test_retriever(),
         sign_url=storage.sign,
         create_checkout=_checkout(base),

@@ -84,7 +84,7 @@ CEILING_USD = 3.00
 SHOTS_PER_PERSON = 3  # num_images maximum is 4 (live OpenAPI)
 MAX_EDGE = 1200
 PAIR_BUDGET_BYTES = 120 * 1024
-DEMO_EMAIL = "kevinleonjouvin@gmail.com"
+DEMO_EMAIL = "OWNER_EMAIL_REDACTED"
 
 FORBIDDEN_IN_SOURCE = ("professional", "studio", "8k", "masterpiece", "beautiful")
 
