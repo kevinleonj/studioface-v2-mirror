@@ -46,3 +46,10 @@ Settled decisions live in docs/DECISIONS.md. Do not re-open them.
 8. Every fix starts with a failing test. Production wiring counts: entry.py must be exercised with only network boundaries faked.
 9. Infra steps are idempotent and proven by `terraform plan` before apply. Secret versions are never added blindly.
 10. When a step needs money, credentials or a console action, open "needs Kevin: <what>" with the exact command and move to the next item. Never idle waiting.
+11. One worktree per task, never a shared checkout. Before starting task N, create
+    `..\wt-N` (a sibling of this checkout, e.g. `C:\Users\KEVIN\dev\wt-40` next to
+    `C:\Users\KEVIN\dev\studioface-v2`) on its own branch, and do every edit, test run,
+    commit and push for that task inside it. The main checkout is for reading only
+    while a task worktree is open. This is what stops two agents from switching
+    branches under each other, landing a commit on the wrong branch, or racing a push
+    — all three happened in one shared checkout on 20-21 Sep 2026 (see HANDOFF.md).

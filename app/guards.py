@@ -121,6 +121,32 @@ class RateLimiter:
             self.counter.decrement(key)
 
 
+@dataclass
+class DailyOrderCeiling:
+    """Task 42: a hard cap on PAID orders per UTC day, so a runaway ad campaign
+    cannot buy more fal generation in one day than a human has approved. Same
+    shared Counter RateLimiter already uses above -- one Firestore document per
+    day, atomic across every Cloud Run instance, never a per-process count (many
+    instances share one deployment).
+
+    Deliberately its own key namespace (`orders:`), never `RateLimiter`'s `g:`
+    daily-preview key: a preview costs nothing and this counts money actually
+    taken, so the two budgets must never be able to eat each other.
+    """
+
+    counter: Counter
+    limit: int = 20
+    now: Callable[[], float] = time.time
+
+    def admit(self) -> bool:
+        """True for this order and every one before it today, up to `limit`. False
+        the moment the ceiling is already spent -- counting only, no refund or
+        email here. Pipeline.admit (app/core.py) is what turns a False into a
+        refund, a killed switch and one page to Kevin."""
+        day = str(int(self.now() // 86400))
+        return self.counter.increment_if_below(f"orders:{day}", self.limit, 86400)
+
+
 # ---------------------------------------------------------------- upload validation
 
 MAGIC = {

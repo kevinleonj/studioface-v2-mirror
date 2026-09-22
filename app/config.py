@@ -55,6 +55,11 @@ class Settings:
     pubsub_push_audience: str | None = None
     # F8. /docs, /redoc and /openapi.json. Off unless explicitly asked for.
     enable_docs: bool = False
+    # Where Pipeline._handle_credit_exhausted sends the one alert when fal locks the
+    # account for lack of credit. A plain address, never a secret — same convention
+    # as ga4_measurement_id above. Optional: an unconfigured deployment still boots
+    # and still refunds and kills the switch, it just cannot page anyone.
+    owner_alert_email: str | None = None
 
     @classmethod
     def from_env(cls, env: dict[str, str] | None = None) -> Settings:
@@ -84,6 +89,7 @@ class Settings:
             pubsub_push_sa=e.get("PUBSUB_PUSH_SA") or None,
             pubsub_push_audience=e.get("PUBSUB_PUSH_AUDIENCE") or None,
             enable_docs=str(e.get("ENABLE_DOCS", "")).strip().lower() in ("1", "true", "yes"),
+            owner_alert_email=e.get("OWNER_ALERT_EMAIL") or None,
         )
 
 

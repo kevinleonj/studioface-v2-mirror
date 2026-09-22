@@ -175,6 +175,12 @@ const WARDROBES = [
 const LIMITED_MESSAGE =
   "Has usado tus pruebas gratis de esta hora. Puedes comprar tus cuatro fotos ahora o volver dentro de una hora.";
 
+// Task 41 (credit-runs-out). GET /health reports the same kill switch /api/preview
+// and /api/checkout already refuse against (503 "paused") — this just says so
+// before a visitor spends a click finding out. Same sentence Kevin sees the switch
+// named by in app/main.py's health payload; the wording itself is the task's own.
+const PAUSED_MESSAGE = "Estamos sin capacidad ahora mismo. Vuelve en unas horas.";
+
 // F5. Measured from Cloud Run request logs, 30-day window, every successful
 // /api/preview: 9.43, 10.04, 11.20, 11.26, 12.30 seconds. Median 11.20, slowest 12.30.
 // The sentence rounds up past the slowest one rather than quoting the median, because
@@ -399,6 +405,33 @@ export function UploadForm() {
   const [handle, setHandle] = useState<Handle | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // Task 41 (credit-runs-out). Starts false so a normal visitor sees the page exactly
+  // as before while GET /health is in flight; only a confirmed killswitch:true flips
+  // it. The server-side guard (503 "paused" on /api/preview and /api/checkout) is
+  // what actually protects the money either way — this only saves a wasted click.
+  const [paused, setPaused] = useState(false);
+
+  // Task 41 (credit-runs-out). Once, on mount, and placed here rather than beside
+  // the other mount effects further down: tests/test_turnstile_widget.py locates
+  // ITS effect by searching for the first `useEffect(() => {` after `const
+  // rendered`, and a second one placed between that point and the turnstile effect
+  // would be picked up by that search instead. A failed or slow health check must
+  // never block the funnel — it only ever turns `paused` ON, and only once /health
+  // actually confirms it, so a network hiccup here leaves the page working exactly
+  // as it did before this task.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/health")
+      .then((res) => res.json())
+      .then((data: { killswitch?: boolean }) => {
+        if (!cancelled && data?.killswitch) setPaused(true);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // C1. The preview used to point at fal's content delivery network, which the
   // Content-Security-Policy has never allowed, so the browser refused it and the
   // visitor got the broken-image icon and a grey box about 500px tall. The address
@@ -1062,19 +1095,29 @@ export function UploadForm() {
               </p>
             ) : null}
           </div>
-          <Button
-            ref={buyButton}
-            size="lg"
-            // Task 34. `handle` can outlive the photos it was made from — a visitor
-            // who removes every kept photo still holds a signed handle from an
-            // earlier preview — so this must check `files.length` too, not just
-            // `busy`, the same way the free-preview button below already does.
-            disabled={busy || files.length === 0}
-            onClick={checkout}
-          >
-            Comprar las cuatro fotos por {PRICE_LABEL}
-          </Button>
+          {paused ? (
+            <p role="status" className="text-sm text-[color:var(--foreground)]">
+              {PAUSED_MESSAGE}
+            </p>
+          ) : (
+            <Button
+              ref={buyButton}
+              size="lg"
+              // Task 34. `handle` can outlive the photos it was made from — a visitor
+              // who removes every kept photo still holds a signed handle from an
+              // earlier preview — so this must check `files.length` too, not just
+              // `busy`, the same way the free-preview button below already does.
+              disabled={busy || files.length === 0}
+              onClick={checkout}
+            >
+              Comprar las cuatro fotos por {PRICE_LABEL}
+            </Button>
+          )}
         </div>
+      ) : paused ? (
+        <p role="status" className="text-sm text-[color:var(--foreground)]">
+          {PAUSED_MESSAGE}
+        </p>
       ) : (
         <Button
           size="lg"

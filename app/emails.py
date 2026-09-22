@@ -31,6 +31,14 @@ SUPPORT = "hola@studioface.app"
 SITE = "https://studioface.app"
 
 REFUND_SENTINEL = "REFUND"
+# Mirrors app/core.py's OWNER_ALERT_PREFIX exactly — kept as a second constant, not a
+# shared import, same reasoning as REFUND_SENTINEL above: this module ships no
+# dependency on core. tests/test_credit_exhausted.py pins the two strings equal.
+OWNER_ALERT_PREFIX = "OWNER_ALERT:"
+# Task 42's two alerts, mirroring app/core.py's DAILY_CEILING_ALERT_PREFIX and
+# REFUND_ALARM_PREFIX exactly, same reasoning and same held-out equality test.
+DAILY_CEILING_ALERT_PREFIX = "OWNER_ALERT_CEILING:"
+REFUND_ALARM_PREFIX = "OWNER_ALERT_REFUNDS:"
 
 
 @dataclass(frozen=True)
@@ -135,9 +143,111 @@ def refund() -> Email:
     )
 
 
+def owner_alert(refunded: int) -> Email:
+    """Sent to OWNER_ALERT_EMAIL, once, the moment Pipeline._handle_credit_exhausted
+    switches the kill switch from off to on. Kevin, not a customer, so plain English
+    and no legal footer — but the same `_shell`/`_button` this module already uses
+    for everything else, per the task: through the same code that sends the delivery
+    and cancellation emails today."""
+    order_word = "order" if refunded == 1 else "orders"
+    body = (
+        f'<p style="margin:0 0 16px;font-size:16px;line-height:1.5">'
+        f"fal has locked the account for lack of credit. {refunded} paid {order_word} "
+        f"{'has' if refunded == 1 else 'have'} been refunded automatically and the "
+        f"shop has stopped selling — no further orders are taken until you reset the "
+        f"kill switch.</p>"
+        f'<p style="margin:0;font-size:14px;line-height:1.5;color:{DIM}">'
+        f"Add credit at fal.ai/dashboard/billing, then reset config/killswitch in "
+        f"Firestore. This is the only email you get for this incident.</p>"
+    )
+    text = (
+        f"fal has locked the account for lack of credit. {refunded} paid {order_word} "
+        f"{'has' if refunded == 1 else 'have'} been refunded automatically and the "
+        "shop has stopped selling — no further orders are taken until you reset the "
+        "kill switch.\n\n"
+        "Add credit at fal.ai/dashboard/billing, then reset config/killswitch in "
+        "Firestore. This is the only email you get for this incident.\n"
+    )
+    return Email(
+        "StudioFace has stopped selling: fal credit ran out",
+        _shell("fal credit ran out", body),
+        text,
+    )
+
+
+def daily_ceiling_alert(limit: int) -> Email:
+    """Sent to OWNER_ALERT_EMAIL, once, the moment Pipeline.admit refuses an order
+    for landing above `limit` paid orders in one UTC day. Task 42, same shell as
+    owner_alert above — plain English, no legal footer, Kevin rather than a
+    customer."""
+    body = (
+        f'<p style="margin:0 0 16px;font-size:16px;line-height:1.5">'
+        f"StudioFace has taken {limit} paid orders today, the daily ceiling. The order "
+        f"that went over it has been refunded automatically and the shop has stopped "
+        f"selling — no further orders are taken until you reset the kill switch.</p>"
+        f'<p style="margin:0;font-size:14px;line-height:1.5;color:{DIM}">'
+        f"Raise the ceiling in app/guards.py (DailyOrderCeiling) if {limit} a day is "
+        f"genuinely too low, then reset config/killswitch in Firestore. This is the "
+        f"only email you get for this incident.</p>"
+    )
+    text = (
+        f"StudioFace has taken {limit} paid orders today, the daily ceiling. The order "
+        f"that went over it has been refunded automatically and the shop has stopped "
+        "selling — no further orders are taken until you reset the kill switch.\n\n"
+        f"Raise the ceiling in app/guards.py (DailyOrderCeiling) if {limit} a day is "
+        "genuinely too low, then reset config/killswitch in Firestore. This is the "
+        "only email you get for this incident.\n"
+    )
+    return Email(
+        f"StudioFace has stopped selling: {limit} paid orders today",
+        _shell("Daily order ceiling reached", body),
+        text,
+    )
+
+
+def refund_alarm(entries: list[tuple[str, str]]) -> Email:
+    """Sent to OWNER_ALERT_EMAIL, once per UTC day, the moment the day's refund
+    count first reaches REFUND_ALARM_THRESHOLD — whatever each order's reason.
+    Does NOT say the shop has stopped: unlike the two alerts above, this one never
+    touches the kill switch, because three refunds in a day is worth a look, not
+    proof anything is broken. Task 42."""
+    rows = "".join(f'<li style="margin:0 0 4px">{oid} — {reason}</li>' for oid, reason in entries)
+    lines = "\n".join(f"{oid} — {reason}" for oid, reason in entries)
+    body = (
+        f'<p style="margin:0 0 16px;font-size:16px;line-height:1.5">'
+        f"{len(entries)} orders were refunded today. The shop is still selling — this "
+        f"is worth a look, not an outage.</p>"
+        f'<ul style="margin:0 0 16px;padding-left:20px;font-size:14px;line-height:1.6">'
+        f"{rows}</ul>"
+        f'<p style="margin:0;font-size:14px;line-height:1.5;color:{DIM}">'
+        f"This is the only email you get for today's refunds.</p>"
+    )
+    text = (
+        f"{len(entries)} orders were refunded today. The shop is still selling — this "
+        f"is worth a look, not an outage.\n\n{lines}\n\n"
+        "This is the only email you get for today's refunds.\n"
+    )
+    return Email(
+        f"StudioFace: {len(entries)} refunds today",
+        _shell("Refunds today", body),
+        text,
+    )
+
+
 def for_body(body: str) -> Email:
-    """The pipeline's send_email port passes either a gallery link or the literal
-    "REFUND". Sniffing a sentinel out of a message body is a poor contract and it is
-    called out in HANDOFF as a follow-up; it is preserved here so this change stays
-    confined to what the customer sees."""
-    return refund() if body == REFUND_SENTINEL else delivery(body)
+    """The pipeline's send_email port passes a gallery link, the literal "REFUND",
+    "OWNER_ALERT:<n>", "OWNER_ALERT_CEILING:<n>" or "OWNER_ALERT_REFUNDS:<id:reason,...>".
+    Sniffing a sentinel out of a message body is a poor contract and it is called out
+    in HANDOFF as a follow-up; it is preserved here so this change stays confined to
+    what the customer (or, for the alert cases, Kevin) sees."""
+    if body == REFUND_SENTINEL:
+        return refund()
+    if body.startswith(DAILY_CEILING_ALERT_PREFIX):
+        return daily_ceiling_alert(int(body.removeprefix(DAILY_CEILING_ALERT_PREFIX)))
+    if body.startswith(REFUND_ALARM_PREFIX):
+        pairs = body.removeprefix(REFUND_ALARM_PREFIX).split(",")
+        entries = [tuple(pair.split(":", 1)) for pair in pairs if pair]
+        return refund_alarm(entries)
+    if body.startswith(OWNER_ALERT_PREFIX):
+        return owner_alert(int(body.removeprefix(OWNER_ALERT_PREFIX)))
+    return delivery(body)

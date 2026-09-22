@@ -17,7 +17,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.core import ModelRefused
+from app.core import BillingRefused, ModelRefused
 from app.logs import log_call
 
 logger = logging.getLogger(__name__)
@@ -30,6 +30,28 @@ APPLICATION = "fal-ai/nano-banana-2/edit"
 # https://fal.ai/docs/documentation/model-apis/errors
 REFUSAL_STATUS = 422
 POLICY = "content_policy_violation"
+
+# fal documents NO status code or error `type` for an account locked for lack of
+# credit (docs/verified.md, 2026-09-22: checked errors.md, request-errors.md and the
+# fal_client SDK source — none of them names one). The one thing fal DOES say,
+# verbatim, in its own FAQ: "When your credit balance drops below your account's
+# lock threshold, your account is locked and API requests will be rejected." So this
+# is a heuristic, not a vendor-confirmed shape: one of fal's own documented
+# authorization codes (401/403, platform-apis v1) or the conventional 402, together
+# with a mention of credit/balance/lock in whatever fal actually sent. Too NARROW
+# burns the whole retry budget calling an account that can never answer again; too
+# WIDE would refund and pause the whole shop over an ordinary auth misconfiguration.
+BILLING_STATUS_CODES = (401, 402, 403)
+BILLING_HINTS = ("credit", "balance", "lock")
+
+
+def _is_billing_refusal(exc: Exception) -> bool:
+    if getattr(exc, "status_code", None) not in BILLING_STATUS_CODES:
+        return False
+    text = " ".join(
+        str(v) for v in (getattr(exc, "error_type", None), getattr(exc, "message", None)) if v
+    ).lower()
+    return any(hint in text for hint in BILLING_HINTS)
 
 
 def _refusal(exc: Exception) -> str | None:
@@ -75,6 +97,9 @@ class FalModel:
         try:
             return self._subscribe(readable, prompt, started)
         except Exception as exc:  # noqa: BLE001 - re-raised unless it is a refusal
+            if _is_billing_refusal(exc):
+                logger.error("fal billing refusal status=%s", getattr(exc, "status_code", None))
+                raise BillingRefused(str(exc)) from exc
             refusal = _refusal(exc)
             if refusal is None:
                 raise

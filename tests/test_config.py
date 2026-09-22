@@ -88,5 +88,14 @@ def test_ga4_is_optional_and_absent_by_default():
     assert s2.ga4_measurement_id == "G-1"
 
 
+def test_owner_alert_email_is_optional_and_absent_by_default():
+    """Task 41. A plain address, never a secret — same convention as ga4 above. An
+    unconfigured deployment still boots; Pipeline just skips the alert."""
+    s = Settings.from_env(FULL)
+    assert s.owner_alert_email is None
+    s2 = Settings.from_env({**FULL, "OWNER_ALERT_EMAIL": "kevin@example.com"})
+    assert s2.owner_alert_email == "kevin@example.com"
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

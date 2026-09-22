@@ -43,6 +43,27 @@ Either signal alone is enough to stop; both together is not required. 50 EUR is 
 enough that this is a single go/no-go check after the cap, not a running dashboard — do not
 build one for this budget.
 
+## Pre-registered test
+
+Written 2026-09-22, before any campaign exists in the Google Ads account — so these
+numbers cannot be adjusted after seeing how the campaign performs.
+
+Budget 150 EUR total, released in three steps of 50 EUR. Step 1 stops after 50 EUR or
+14 days, whichever first. Kill after step 1 if clicks from Google Ads are fewer than
+25, or previews started are fewer than 1 in 10 clicks, or paid orders are zero.
+Continue to step 2 only if cost per paid order projects under 20 EUR (spend divided by
+paid orders). Kill after step 3 if cost per paid order is above 11,99 EUR or paid
+orders are fewer than 8. Arithmetic shown: at 1,20 EUR a click, 50 EUR buys about 42
+clicks; 4 percent buying gives 1 to 2 orders and 8 percent gives 3 to 4, so step 1 can
+only tell 'zero' from 'some'; the 4-versus-8 percent question needs all 150 EUR, about
+125 clicks. The numbers 1,20 EUR and 4 to 8 percent are labelled estimate; the click
+price comes from Google Keyword Planner on 20 September 2026 and the buy rate has
+never been measured at 19,99 EUR.
+
+`scripts/funnel_report.py` (task 46) is what reads the previews-started and
+paid-orders numbers this rule needs, from Firestore and the app's own records — read
+only, no campaign is created or touched by it.
+
 ## Open — Kevin decides
 
 - **Bidding strategy.** `rsa.json`'s `campaign.bidding` is `"OPEN: Kevin decides"` on

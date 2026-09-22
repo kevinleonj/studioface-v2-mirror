@@ -20,8 +20,12 @@ from google.api_core.exceptions import AlreadyExists
 
 
 class FakeSnapshot:
-    def __init__(self, data: dict | None) -> None:
+    def __init__(self, data: dict | None, id: str | None = None) -> None:
         self._data = data
+        # Real firestore.DocumentSnapshot.id is the last path segment. Optional and
+        # unused by every caller before task 46: adding it here is additive, not a
+        # behaviour change for existing callers, who never read it.
+        self.id = id
 
     @property
     def exists(self) -> bool:
@@ -69,6 +73,19 @@ class FakeCollection:
 
     def document(self, doc_id: str) -> FakeDocumentRef:
         return FakeDocumentRef(self._store, f"{self._name}/{doc_id}")
+
+    def stream(self):
+        """Every document in this collection, id included. Real
+        firestore.CollectionReference.stream() does the same with no filter --
+        task 46's funnel report needs it to sum every `store:<hash>` rate-limit
+        counter and to walk every order, neither of which has an equality filter
+        to key off."""
+        prefix = f"{self._name}/"
+        return (
+            FakeSnapshot(doc, id=path[len(prefix) :])
+            for path, doc in self._store.items()
+            if path.startswith(prefix)
+        )
 
     def where(self, field_path=None, op_string=None, value=None, *, filter=None) -> FakeQuery:
         if filter is None or filter.op_string != "==":

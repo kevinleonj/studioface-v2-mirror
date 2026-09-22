@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 from functools import partial
 from typing import Protocol
 
-from app.guards import build_prompt
+from app.guards import DailyOrderCeiling, build_prompt
 from app.logs import id_prefix
 
 logger = logging.getLogger(__name__)
@@ -49,9 +49,33 @@ class ModelRefused(Exception):
         self.detail = detail
 
 
+class BillingRefused(Exception):
+    """fal has locked the account for lack of credit, or refused for some other
+    billing reason. Distinct from ModelRefused on purpose: a content refusal is the
+    VISITOR's to fix; this one is ours, and no amount of retrying fixes it — every
+    other call to the same account fails identically until Kevin adds credit.
+    app/adapters/fal.py raises this instead of ModelRefused for that case, and
+    docs/verified.md (22 Sep 2026) records that fal documents no stable status code
+    or error `type` for it, so the detection there is a heuristic."""
+
+
 # o= and t= are appended as a FRAGMENT (#o=...&t=...), not a query, so the static
 # export needs one /g/ page and the key is never sent to any server (task 31).
 GALLERY_BASE = "https://studioface.app/g/"
+
+# app/emails.py maps these two exact strings back to an Email. Two constants, not one
+# shared import, because core.py has never imported emails.py (it has "no cloud SDKs
+# ... on purpose") and this task is not the place to start that.
+REFUND_EMAIL_SENTINEL = "REFUND"
+OWNER_ALERT_PREFIX = "OWNER_ALERT:"
+# Task 42, daily-money-stops: two more unattended stops, same sentinel convention as
+# OWNER_ALERT_PREFIX above (app/emails.py's for_body sniffs a prefix, never a shared
+# import into this no-cloud-SDK module).
+DAILY_CEILING_ALERT_PREFIX = "OWNER_ALERT_CEILING:"
+REFUND_ALARM_PREFIX = "OWNER_ALERT_REFUNDS:"
+# Refunded orders in one UTC day that pages Kevin once -- a signal to go look, not to
+# stop selling (Pipeline._tally_refund below never touches the kill switch).
+REFUND_ALARM_THRESHOLD = 3
 
 # ---------------------------------------------------------------- utilities
 
@@ -174,6 +198,12 @@ class OrderStore:
         self._orders: dict[str, Order] = {}
         self._events: set[str] = set()
         self.killswitch: bool = False  # Firestore doc config/killswitch in prod
+        # Task 42: today's refunded orders, keyed by UTC day, so the refund-rate
+        # alarm can name which orders it is about. FirestoreOrderStore below keeps
+        # the same shape in one Firestore transaction per call, same pattern as
+        # claim_event's AlreadyExists gate just above.
+        self._refund_tally: dict[str, list[tuple[str, str]]] = {}
+        self._refund_alarmed: set[str] = set()
 
     def claim_event(self, event_id: str) -> bool:
         """Idempotency gate. Firestore: create() on doc id -> AlreadyExists."""
@@ -188,6 +218,19 @@ class OrderStore:
     def get(self, order_id: str) -> Order | None:
         return self._orders.get(order_id)
 
+    def record_refund(self, order_id: str, reason: str, day: str) -> list[tuple[str, str]] | None:
+        """Append one refunded order to today's tally. Returns the day's first
+        REFUND_ALARM_THRESHOLD entries the MOMENT the count first reaches that
+        threshold, so the caller (Pipeline._tally_refund) sends exactly one alert;
+        None before that moment and after it (never a second list for the 4th,
+        5th, ... refund of the same day)."""
+        entries = self._refund_tally.setdefault(day, [])
+        entries.append((order_id, reason))
+        if len(entries) >= REFUND_ALARM_THRESHOLD and day not in self._refund_alarmed:
+            self._refund_alarmed.add(day)
+            return list(entries[:REFUND_ALARM_THRESHOLD])
+        return None
+
     def find_by_email(self, email: str) -> list[Order]:
         """Only used to resend a delivery link to the buyer's own address."""
         return [o for o in self._orders.values() if o.email.strip().lower() == email]
@@ -198,9 +241,17 @@ class OrderStore:
 
 def _attempt(job: Callable[[], str]) -> str | None:
     """One fal call. A dead provider must burn the retry budget, not the order, so the
-    failure is logged with its traceback and reported as None rather than raised."""
+    failure is logged with its traceback and reported as None rather than raised.
+
+    BillingRefused is the one exception that is NOT swallowed here: every other call
+    to a locked account fails identically, so burning the rest of the retry budget on
+    it would only delay the refund. It propagates through run_batch to Pipeline._generate,
+    which stops the order rather than counting this as one more wasted attempt.
+    """
     try:
         return job()
+    except BillingRefused:
+        raise
     except Exception:
         logger.exception("image generation attempt failed")
         return None
@@ -233,6 +284,15 @@ class Pipeline:
     n_images: int = 4
     extra_attempts: int = 4  # order-level retry budget, NOT per image
     min_deliverable: int = 4
+    # Who to tell when fal locks the account for lack of credit. None is valid (an
+    # unconfigured OWNER_ALERT_EMAIL skips the alert, same convention as ga4 in
+    # app/config.py) — the refund and the kill switch happen either way.
+    owner_email: str | None = None
+    # Task 42: the daily-order-ceiling guard, shared across every Cloud Run instance
+    # (its Counter is Firestore in production). None is valid — an unwired deployment
+    # (or any test that does not care about this stop) simply never refuses an order
+    # for being over a ceiling, same convention as owner_email=None above.
+    order_ceiling: DailyOrderCeiling | None = None
 
     def run(self, order_id: str) -> Order:
         order = self.store.get(order_id)
@@ -255,7 +315,9 @@ class Pipeline:
         order.status = "generating"
         order.started_at = self.now()
         self.store.put(order)
-        self._generate(order)
+        if self._generate(order):
+            self._handle_credit_exhausted(order)
+            return order
 
         if len(order.outputs) >= self.min_deliverable:
             order.status = "delivered"
@@ -268,7 +330,7 @@ class Pipeline:
             self.track_conversion(order)
         else:
             self._refund(order)
-            self.send_email(order.email, "REFUND")
+            self.send_email(order.email, REFUND_EMAIL_SENTINEL)
         return order
 
     def _lease_held(self, order: Order) -> bool:
@@ -277,12 +339,18 @@ class Pipeline:
             return False
         return (self.now() - order.started_at) < LEASE_SECONDS
 
-    def _refund(self, order: Order) -> None:
+    def _refund(self, order: Order, reason: str = "undeliverable") -> None:
         """Ask for the money back and record what the provider actually said.
 
         Writing "failed_refunded" on the strength of the request alone was a lie for
         any asynchronous method: a Bizum refund that ends "failed" left the order
         claiming the customer had been paid back, with nothing in the log.
+
+        `reason` is task 42's addition: every caller below names why (an ordinary
+        undeliverable order, fal's credit lockout, the daily order ceiling), and
+        `_tally_refund` is what turns today's reasons into Kevin's one refund-rate
+        email — never a second mechanism, the same choke point every refund path
+        already runs through.
         """
         result = self.refund(order.id, order.amount_cents)
         if result is None:
@@ -290,6 +358,7 @@ class Pipeline:
             # always reports; tests/test_refund_status.py pins that.
             order.status = "failed_refunded"
             self.store.put(order)
+            self._tally_refund(order, reason)
             return
         order.refund_id, order.refund_status = result.id, result.status
         order.status = (
@@ -312,11 +381,95 @@ class Pipeline:
                 result.status,
             )
         self.store.put(order)
+        self._tally_refund(order, reason)
 
-    def _generate(self, order: Order) -> None:
+    def _tally_refund(self, order: Order, reason: str) -> None:
+        """Task 42, refund-rate alarm. Counts every refund regardless of cause — the
+        alarm is about the RATE of money going back out, not any one reason — and
+        pages Kevin once, the moment the day's count first reaches
+        REFUND_ALARM_THRESHOLD. Never touches the kill switch: three refunds is
+        worth a look, not proof the shop should stop selling.
+        """
+        day = str(int(self.now() // 86400))
+        entries = self.store.record_refund(order.id, reason, day)
+        if entries is None or not self.owner_email:
+            return
+        named = ",".join(f"{id_prefix(oid)}:{r}" for oid, r in entries)
+        self.send_email(self.owner_email, f"{REFUND_ALARM_PREFIX}{named}")
+
+    def _handle_credit_exhausted(self, order: Order) -> None:
+        """fal has locked the account for lack of credit (docs/verified.md, 22 Sep
+        2026: fal's own FAQ says outright "your account is locked and API requests
+        will be rejected"). Nothing left in the retry budget would ever succeed, so
+        _generate stops before spending it: refund THIS order through the exact same
+        path and customer email as any other undeliverable one, then close the shop
+        until Kevin restocks the balance and resets the switch by hand — there is no
+        code path that turns it off again. The owner alert fires only on the
+        transition from off to on, so a second order caught by the same outage
+        refunds silently instead of paging Kevin twice for one incident.
+        """
+        self._refund(order, reason="fal_credit")
+        self.send_email(order.email, REFUND_EMAIL_SENTINEL)
+        already_on = self.store.killswitch
+        self.store.killswitch = True
+        logger.error(
+            "fal credit exhausted order_id=%s status=%s killswitch_was_already_on=%s",
+            id_prefix(order.id),
+            order.status,
+            already_on,
+        )
+        if not already_on and self.owner_email:
+            self.send_email(self.owner_email, f"{OWNER_ALERT_PREFIX}1")
+
+    def admit(self, order: Order) -> bool:
+        """Task 42, daily order ceiling. Called from app/main.py's _fulfil_session —
+        the one place a paid Stripe session becomes an Order — BEFORE the order is
+        stored and generation is enqueued.
+
+        True: a normal paid order, at or under order_ceiling.limit for today. The
+        caller stores it and enqueues generation exactly as before this task.
+
+        False: today's ceiling is already spent. Stripe has already taken this
+        order's money, so there is nothing left to "refuse" except generating it:
+        this refunds it through the exact same path and customer email as any other
+        undeliverable order, then — the same off-to-on transition
+        _handle_credit_exhausted uses above — kills the switch (closing
+        /api/checkout and /api/preview to every order after this one) and pages
+        Kevin once, so a human raises the ceiling or resets the switch on purpose
+        rather than the shop grinding through the rest of the day on someone's ad
+        budget.
+
+        No order_ceiling configured (None, the default): always admits — same
+        convention as owner_email=None.
+        """
+        if self.order_ceiling is None or self.order_ceiling.admit():
+            return True
+        self._refund(order, reason="daily_ceiling")
+        self.send_email(order.email, REFUND_EMAIL_SENTINEL)
+        already_on = self.store.killswitch
+        self.store.killswitch = True
+        logger.error(
+            "daily order ceiling reached order_id=%s limit=%s killswitch_was_already_on=%s",
+            id_prefix(order.id),
+            self.order_ceiling.limit,
+            already_on,
+        )
+        if not already_on and self.owner_email:
+            self.send_email(
+                self.owner_email, f"{DAILY_CEILING_ALERT_PREFIX}{self.order_ceiling.limit}"
+            )
+        return False
+
+    def _generate(self, order: Order) -> bool:
         """Fill order.outputs in waves. Each wave asks for exactly the images still
         missing, capped by what is left of the order-level retry budget, and runs them
-        through run_batch — concurrently in production, one at a time in tests."""
+        through run_batch — concurrently in production, one at a time in tests.
+
+        Returns True the moment fal refuses for lack of credit. Every other call to
+        the same account would fail identically, so no further wave runs — the
+        caller (Pipeline.run) refunds and stops selling instead of burning the rest
+        of the retry budget finding that out four more times.
+        """
         budget = self.n_images + self.extra_attempts
         while len(order.outputs) < self.n_images and order.attempts < budget:
             wave = min(self.n_images - len(order.outputs), budget - order.attempts)
@@ -329,7 +482,12 @@ class Pipeline:
                 )
                 for i in range(len(order.outputs), len(order.outputs) + wave)
             ]
-            for got in self.run_batch(jobs):
+            try:
+                results = self.run_batch(jobs)
+            except BillingRefused:
+                self.store.put(order)
+                return True
+            for got in results:
                 if got is None:
                     continue
                 # Key assigned here, in the main thread, so parallel results cannot
@@ -337,3 +495,4 @@ class Pipeline:
                 key = f"{order.id}/{len(order.outputs)}.jpg"
                 order.outputs.append(self.storage.put(key, got))
             self.store.put(order)
+        return False

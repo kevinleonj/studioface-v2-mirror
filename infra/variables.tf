@@ -33,3 +33,11 @@ variable "ga4_measurement_id" {
   type    = string
   default = ""
 }
+# Where Pipeline._handle_credit_exhausted sends the one alert when fal locks the
+# account for lack of credit. A plain address, never a secret (task 41). Empty is
+# valid: app/config.py then leaves owner_alert_email unset and the alert is skipped,
+# never the refund or the kill switch.
+variable "owner_alert_email" {
+  type    = string
+  default = ""
+}

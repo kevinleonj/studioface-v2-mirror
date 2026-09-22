@@ -20,8 +20,8 @@ from app.adapters.gcs import preview_resigner, signed_url_maker, source_uploader
 from app.adapters.pubsub_push import pubsub_verifier
 from app.adapters.turnstile import verify_turnstile
 from app.config import Settings, stripe_mode
-from app.core import Order, OrderStore, Pipeline, Refund, threaded_batch
-from app.guards import RateLimiter
+from app.core import REFUND_ALARM_THRESHOLD, Order, OrderStore, Pipeline, Refund, threaded_batch
+from app.guards import DailyOrderCeiling, RateLimiter
 from app.logs import configure_logging, id_prefix, log_call
 from app.main import THANKS_PATH, make_app
 from app.preview import Preview
@@ -319,6 +319,30 @@ class FirestoreOrderStore(OrderStore):
         # newer one wrote, and an unexpected key must not take the service down.
         return Order(**{k: v for k, v in data.items() if k in _ORDER_FIELDS})
 
+    def record_refund(self, order_id: str, reason: str, day: str) -> list[tuple[str, str]] | None:
+        """Same contract as OrderStore.record_refund: read today's tally, append,
+        and — the moment the count first reaches REFUND_ALARM_THRESHOLD — flip
+        `alarmed` and hand the caller the list that tripped it.
+
+        Read-then-write, same as the `killswitch` property above, not a Firestore
+        transaction like FirestoreCounter's: this is an alert (worth going to look
+        at), never a ceiling money depends on, so the same accepted race
+        task 41's HANDOFF entry documents for the credit-exhaustion alert applies
+        here too — two refunds landing in the same instant on two instances could
+        under-count by one and delay the alert to the next refund, never send it
+        twice for the same threshold crossing.
+        """
+        ref = self.db.collection("config").document(f"refund_tally_{day}")
+        snap = ref.get()
+        data = snap.to_dict() if snap.exists else {}
+        entries = list(data.get("entries", [])) + [{"id": order_id, "reason": reason}]
+        alarmed = bool(data.get("alarmed", False))
+        fire = len(entries) >= REFUND_ALARM_THRESHOLD and not alarmed
+        ref.set({"entries": entries[:REFUND_ALARM_THRESHOLD], "alarmed": alarmed or fire})
+        if not fire:
+            return None
+        return [(e["id"], e["reason"]) for e in entries[:REFUND_ALARM_THRESHOLD]]
+
 
 def build(settings: Settings | None = None) -> object:
     # F7/O10 first, before anything else can want to say something. Nothing configured
@@ -354,6 +378,11 @@ def build(settings: Settings | None = None) -> object:
         ),
         run_batch=threaded_batch,  # four fal calls at once, not one after another
         secret=s.app_token_secret,
+        owner_email=s.owner_alert_email,
+        # Task 42: 20 paid orders per UTC day. Its own Firestore counter document
+        # (key "orders:<day>"), never RateLimiter's own daily key below - a preview
+        # costs nothing and this counts money actually taken.
+        order_ceiling=DailyOrderCeiling(counter=FirestoreCounter(db)),
     )
     limiter = RateLimiter(counter=FirestoreCounter(db), salt=s.app_token_secret)
     # Named so task 29's storage-only path (store_sources_fn=preview.store_only) shares

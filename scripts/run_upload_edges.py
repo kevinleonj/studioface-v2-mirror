@@ -27,6 +27,15 @@ the browser (the dummy site key only changes what siteverify answers, not whethe
 script loads) — the same thing scripts/run_funnel.py already does, and Cloudflare
 documents these keys as free to use for exactly this. Nothing here needs the widget
 to finish, though: the two buttons under test are not gated on it.
+
+Task 44 (old-links-through-a-real-mail-client) needs Analytics() (components/
+consent.tsx) to actually render its script tags — it returns null for an empty id —
+so this build also carries a dummy GA4 id (DUMMY_GA4_ID), the same real production id
+this task must not touch stays only in frontend/.env.production / the GitHub variable
+deploy.yml writes. Unlike Turnstile, nothing here needs that script to load for real
+either: tests/e2e/test_upload_edges.py's `page` fixture intercepts every request to
+googletagmanager.com before it leaves the browser, for every test in that file, so
+this build never reaches Google for real regardless of which test runs.
 """
 
 from __future__ import annotations
@@ -50,6 +59,14 @@ BASE = f"http://{HOST}:{PORT}"
 # rather than written as a literal, so the repository's credential-shaped-literal
 # guard, which cannot tell a public test constant from a real key, does not have to.
 DUMMY_SITE_KEY = "1x" + "0" * 20 + "AA"
+
+# GA4-measurement-id shaped, obviously not the real one (frontend/src/lib/config.ts's
+# own docstring: the real value ships from a GitHub variable into .env.production at
+# deploy time, never from here). tests/test_bootstrap.py's own
+# test_ga4_secret_regex_rejects_measurement_id pins that this exact shape is a
+# measurement id, not a secret, so — same as test_config.py's "G-1" and
+# tests/test_ga4.py's "G-ABC123" — it does not need DUMMY_SITE_KEY's assembly trick.
+DUMMY_GA4_ID = "G-EDGETEST01"
 
 ENV_FILE = ROOT / "frontend" / ".env.production"
 
@@ -100,7 +117,7 @@ def build_with_dummy_widget() -> None:
     if ENV_FILE.exists():
         shutil.copy2(ENV_FILE, backup)
     ENV_FILE.write_text(
-        f"NEXT_PUBLIC_TURNSTILE_SITEKEY={DUMMY_SITE_KEY}\nNEXT_PUBLIC_GA4_ID=\n",
+        f"NEXT_PUBLIC_TURNSTILE_SITEKEY={DUMMY_SITE_KEY}\nNEXT_PUBLIC_GA4_ID={DUMMY_GA4_ID}\n",
         encoding="utf-8",
     )
     try:

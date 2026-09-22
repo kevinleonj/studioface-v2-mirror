@@ -203,6 +203,14 @@ resource "google_cloud_run_v2_service" "api" {
         name  = "GA4_MEASUREMENT_ID"
         value = var.ga4_measurement_id
       }
+      env {
+        # Task 41. A plain address, never a secret: Pipeline._handle_credit_exhausted
+        # sends the one alert here when fal locks the account for lack of credit.
+        # Optional in app/config.py: without it the refund and the kill switch still
+        # happen, only the page to Kevin is skipped.
+        name  = "OWNER_ALERT_EMAIL"
+        value = var.owner_alert_email
+      }
       dynamic "env" {
         for_each = local.secret_ids
         content {

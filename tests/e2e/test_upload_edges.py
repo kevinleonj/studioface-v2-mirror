@@ -89,6 +89,21 @@ def page():
         browser = pw.chromium.launch()
         context = browser.new_context(viewport={"width": 390, "height": 844})
         p = context.new_page()
+        # Task 44: scripts/run_upload_edges.py now bakes a dummy GA4 id into this
+        # build (DUMMY_GA4_ID) so components/consent.tsx's Analytics() renders its
+        # script tags at all — every page in this whole file now carries one. This
+        # stub, for every test, stops that script from ever really leaving for
+        # googletagmanager.com, same "cost: none, by construction" guarantee the
+        # module docstring already makes for the image model. The one test that
+        # cares what this script tag looked like (test_old_shape_gallery_link_...)
+        # still sees the real request — Playwright's request event fires whether or
+        # not a route later fulfills it — it just never gets a real answer back.
+        p.route(
+            "**/googletagmanager.com/**",
+            lambda route: route.fulfill(
+                status=200, content_type="application/javascript", body="/* stubbed in tests */"
+            ),
+        )
         yield p
         browser.close()
 
@@ -326,14 +341,24 @@ def test_turnstile_failure_says_it_did_not_pass_not_that_it_expired(page):
 
 
 def test_the_buy_button_is_visible_and_enabled_at_the_free_preview_limit(page):
+    from playwright.sync_api import expect
+
     open_app(page)
     choose(page, FACE)
     fake_preview(page, LIMITED_HANDLE)
     page.get_by_role("button", name="Ver una prueba gratis").click()
-    assert page.get_by_text(
-        "Has usado tus pruebas gratis de esta hora. Puedes comprar tus cuatro "
-        "fotos ahora o volver dentro de una hora."
-    ).is_visible()
+    # expect(...).to_be_visible() polls, unlike a bare .is_visible() read at the
+    # instant this line runs: task 44's dummy GA4 id (scripts/run_upload_edges.py)
+    # means every page in this file now mounts one more afterInteractive script, and
+    # that extra work was enough to occasionally win the race against a plain
+    # .is_visible() called right after .click() with no wait of its own — the same
+    # auto-waiting fix expect_thumb_count already uses above, not a behaviour change.
+    expect(
+        page.get_by_text(
+            "Has usado tus pruebas gratis de esta hora. Puedes comprar tus cuatro "
+            "fotos ahora o volver dentro de una hora."
+        )
+    ).to_be_visible()
     # Not a promise the terms do not already make: no preview image, no claim one is
     # coming.
     assert page.locator("img[alt='Prueba gratuita de tu foto de perfil']").count() == 0
@@ -516,3 +541,123 @@ def test_the_preview_and_buy_button_survive_returning_from_the_payment_page(page
     assert buy.is_visible(), "the buy button must survive a return from Stripe's cancel redirect"
     assert generation_calls["count"] == 1, "returning from Stripe must never mint a new preview"
     assert resign_calls["count"] == 1
+
+
+# ---------------------------------------------------------------- task 44
+#
+# old-links-through-a-real-mail-client. HANDOFF.md's own task 31 entry names exactly
+# this gap: GalleryLinkRewrite (components/consent.tsx) and the old
+# /api/orders/{order}/{token} route were each proven against requests shaped like an
+# old link, but nobody had opened an actual old-shape gallery link (/g/?o=&t=) in a
+# real browser and watched what left it before this test. scripts/check_gallery_
+# privacy.py already does this against production, where the real GA4 id is
+# configured; this is the automatable half — the gallery's own order lookup is
+# answered inside the browser (never the loopback server, whose OrderStore starts
+# empty every run with no way for this test process to seed it, since the server is
+# a separate subprocess), and Google is never really called (the `page` fixture
+# stubs googletagmanager.com for every test in this file).
+
+GOOGLE_HOSTS = (
+    "google-analytics.com",
+    "analytics.google.com",
+    "googletagmanager.com",
+    "doubleclick.net",
+    "googleadservices.com",
+)
+# Obviously made up: not a real order, not a real signing key. Never a request this
+# server (or a real one) would honour — this test answers /api/orders/* itself.
+OLD_LINK_ORDER = "fake-order-old-mail-client"
+OLD_LINK_TOKEN = "fake-token-old-mail-client-9f2c"
+
+
+def fake_delivered_order(page, order: str, token: str, images: list[str]) -> None:
+    """Answers GET /api/orders/{order} (task 31's header-shape route, the only one
+    frontend/src/app/g/page.tsx ever calls) entirely inside the browser — same
+    technique as fake_preview above. Refuses a wrong token exactly like the real
+    _order_status_payload does, as the one case that must be refused next to the one
+    that must get through."""
+
+    def handler(route):
+        sent = route.request.headers.get("x-gallery-token")
+        if sent != token:
+            route.fulfill(status=404, json={"detail": "Not Found"})
+            return
+        route.fulfill(
+            status=200, json={"status": "delivered", "images": images, "downloads": images}
+        )
+
+    page.route(f"**/api/orders/{order}", handler)
+
+
+def test_old_shape_gallery_link_is_rewritten_before_analytics_and_leaks_no_key(page):
+    """Measured first, against a real navigation to the OLD shape, before writing the
+    assertions below: gtag.js's own library file (a static, public URL —
+    `.../gtag/js?id=<GA4_ID>`, the same id on every page and every visitor) can
+    request itself before GalleryLinkRewrite's history.replaceState finishes, because
+    it never carries page data and Next's "afterInteractive" scripts are not ordered
+    against a beforeInteractive one by request time, only by execution time. What
+    would actually leak the key is a REPORTING hit — GA4's collect endpoint, carrying
+    the page's own address in a `dl=` parameter — and every one measured here already
+    carried the clean, explicit override consent.tsx's Analytics() sets for `/g/`
+    (`window.location.origin+'/g/'`), never the raw address, and always after the
+    rewrite. Both properties are asserted below rather than assumed from this one
+    measurement."""
+    order, token = OLD_LINK_ORDER, OLD_LINK_TOKEN
+    images = [f"/__fake__/gallery-{i}.jpg" for i in range(1, 5)]
+    fake_delivered_order(page, order, token, images)
+    # Real JPEG bytes (FACE, already used elsewhere in this file), so the page's own
+    # onLoad handler actually fires and "the four photos load" is a real assertion,
+    # not a guess from a broken <img>.
+    page.route(
+        "**/__fake__/gallery-*.jpg",
+        lambda route: route.fulfill(status=200, content_type="image/jpeg", body=FACE.read_bytes()),
+    )
+
+    # (request url, what the address bar already showed at that instant) for every
+    # request this page makes to a Google host. The event fires whether or not a
+    # route later answers it, so the fixture's googletagmanager.com stub above does
+    # not blind this.
+    google_requests: list[tuple[str, str]] = []
+    page.on(
+        "request",
+        lambda request: (
+            google_requests.append((request.url, page.url))
+            if any(host in request.url for host in GOOGLE_HOSTS)
+            else None
+        ),
+    )
+
+    page.goto(f"{BASE}/g/?o={order}&t={token}", wait_until="load")
+
+    # GalleryLinkRewrite (beforeInteractive, ahead of hydration and every Google
+    # script) must already have moved the key into the fragment.
+    assert page.url == f"{BASE}/g/#o={order}&t={token}", page.url
+    assert "?o=" not in page.url, "the old query shape is still in the address bar"
+
+    for i in range(1, 5):
+        page.wait_for_selector(f"img[alt='Foto de perfil {i}'].sf-land", timeout=15_000)
+    # The page_view hit fires as soon as Analytics() calls gtag('config', ...); wait
+    # for it explicitly rather than guessing a sleep long enough.
+    page.wait_for_event(
+        "request",
+        predicate=lambda r: "google-analytics.com" in r.url or "analytics.google.com" in r.url,
+        timeout=15_000,
+    )
+
+    # The one thing that must be refused, for every request to a Google host without
+    # exception, script file included: the key must never appear in any of them.
+    assert google_requests, "expected at least one request to a Google host"
+    for url, _ in google_requests:
+        assert order not in url and token not in url, url
+
+    # The one thing that must get through cleanly: every REPORTING hit (GA4's collect
+    # endpoint, identified by its own `dl=` document-location parameter) must show the
+    # address bar already rewritten at the moment it fired — the actual mechanism
+    # that would leak the key if the rewrite were ever late or removed.
+    reporting_hits = [(u, a) for u, a in google_requests if "dl=" in u]
+    assert reporting_hits, "expected at least one GA4 reporting hit (page_view)"
+    for url, address_bar_at_the_time in reporting_hits:
+        assert "?o=" not in address_bar_at_the_time, (
+            f"the address bar still carried the query shape when a reporting hit "
+            f"left: {address_bar_at_the_time} -> {url}"
+        )

@@ -4,9 +4,9 @@ A hook in .git/hooks exists on exactly one machine, is not versioned, and nobody
 see it in a diff. `core.hooksPath` points git at a directory in the repository, so the
 hook is reviewed like any other file and arrives with a clone.
 
-The escape hatch is deliberately not a bare flag. It demands a sentence and writes that
-sentence into HANDOFF.md, so skipping the gate becomes a fact in the repository rather
-than something that happened on somebody's laptop at midnight.
+There is no escape hatch (see tests/test_no_gate_skip.py for the proof, run against
+the hook's real behaviour rather than its text): the only way a push gets through is
+a green run of scripts/ci.py.
 """
 
 import os
@@ -51,14 +51,6 @@ def test_the_hook_runs_the_gate_and_refuses_on_red():
     assert GATE_CALL.findall(body), "the hook does not run the gate"
     assert "exit 1" in body, "the hook cannot refuse anything"
     assert "REFUSED" in body
-
-
-def test_the_escape_hatch_demands_a_reason_and_records_it():
-    """A skip nobody can find afterwards is the same as no gate."""
-    body = code()
-    assert "SF_SKIP_GATE" in body
-    assert "HANDOFF.md" in body, "a skip that is not written down did not happen"
-    assert "Reason given" in body
 
 
 @pytest.mark.skipif(

@@ -153,5 +153,47 @@ def test_no_email_contains_an_unrendered_placeholder():
         assert "PENDIENTE" not in both_parts(e)
 
 
+# ---------------------------------------------------------------- task 44
+#
+# old-links-through-a-real-mail-client. Neither call site that ever hands send_email a
+# real gallery link — app/core.py's Pipeline.run (the delivery email) and app/main.py's
+# /api/recuperar (the recover email) — had ever had the link it builds actually run
+# through this module's template. tests/test_money_path.py and tests/test_recuperar.py
+# already prove each call site builds the fragment shape; nothing proved the template
+# keeps it that way once rendered, rather than, say, HTML-escaping the "&" into "&amp;"
+# and silently breaking the one link the customer needs. GALLERY_BASE and
+# delivery_token are imported from app.core (not retyped) so a change to either real
+# construction is felt here, not just in a copy of today's literal.
+
+
+def _real_gallery_link(order_id: str) -> str:
+    """The exact expression both app/core.py's Pipeline.run and app/main.py's
+    /api/recuperar use to build the link they hand to send_email."""
+    from app.core import GALLERY_BASE, delivery_token
+
+    token = delivery_token(order_id, "task-44-fake-secret")
+    return f"{GALLERY_BASE}#o={order_id}&t={token}"
+
+
+def test_the_delivery_email_renders_the_fragment_shape_never_the_query_shape():
+    """app/core.py's Pipeline.run hands this exact shape to send_email, which
+    app/entry.py routes through emails.for_body straight into emails.delivery."""
+    link = _real_gallery_link("cs_test_44_delivery_fake")
+    e = emails.for_body(link)
+    assert link in e.html and link in e.text
+    assert "?o=" not in e.html and "?o=" not in e.text, "query shape must never appear"
+
+
+def test_the_recover_email_renders_the_fragment_shape_never_the_query_shape():
+    """/api/recuperar mints its own token for a resend but builds the identical
+    GALLERY_BASE + '#o=...&t=...' shape and hands it to the same send_email port, so
+    it reaches the same template. Proven separately from the delivery case above so a
+    regression in either call site is caught on its own."""
+    link = _real_gallery_link("cs_test_44_recover_fake")
+    e = emails.for_body(link)
+    assert link in e.html and link in e.text
+    assert "?o=" not in e.html and "?o=" not in e.text, "query shape must never appear"
+
+
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))

@@ -832,12 +832,23 @@ def _fulfil_session(d: Deps, session: dict) -> bool:
 
     The claim key stays, one line below, as the guard against two callers arriving at the
     same moment - the case an existence check alone cannot cover.
+
+    Task 42: this is also the ONE place, shared by the webhook and the redirect, where
+    a paid Stripe session becomes an Order - so it is where the daily order ceiling has
+    to be checked. Not at /api/checkout: a checkout attempt there is free to make and
+    Stripe may never complete it, so counting there would cap browser visits, not paid
+    orders. Pipeline.admit runs before the order is stored or generation is enqueued;
+    when it refuses, it has already refunded the order itself (Stripe already took the
+    money) and stored it as failed_refunded, so this still returns True - the session
+    IS fulfilled, in the sense that nothing else should try again.
     """
     if d.pipeline.store.get(session["id"]) is not None:
         return False
     if not d.pipeline.store.claim_event(f"{FULFIL_PREFIX}{session['id']}"):
         return False
     order = _order_from_session(session)
+    if not d.pipeline.admit(order):
+        return True
     d.pipeline.store.put(order)
     d.enqueue(order.id)  # Cloud Tasks -> /internal/generate
     return True

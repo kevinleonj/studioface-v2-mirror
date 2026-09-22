@@ -142,3 +142,28 @@ tell you either "clean" or exactly what I found instead.
 Later refund confirmation, once it's had a few minutes to process:
 
     `refund settled order_id=cs_live_REDACTED refund_id=... status=succeeded order_status=refunded`
+
+## If the shop stops selling
+
+The shop can stop itself on its own -- for instance if fal locks the account for
+lack of credit, or if too many orders refund in one day -- and until now there was
+no way to turn it back on except by hand in the Firestore console. There is now a
+script for it, runnable from any shell that has `gcloud` on PATH and is logged into
+your Google account (a phone terminal app works too, not just this machine).
+
+Check whether the shop is currently open or stopped:
+
+    python scripts/killswitch.py --status
+
+Stop the shop from taking any more orders or free previews right now:
+
+    python scripts/killswitch.py --on
+
+Let the shop sell again:
+
+    python scripts/killswitch.py --off
+
+Each command prints the Firestore document it read or wrote
+(`config/killswitch`) and the result (`ON (shop stopped)` or
+`OFF (shop selling)`), and refuses to run at all if `gcloud` is pointed at any
+Google Cloud project other than this app's own.

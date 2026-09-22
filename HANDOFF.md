@@ -4073,3 +4073,761 @@ ad-landing component was flagged but not fixed, and nobody has confirmed the und
 fix by eye in a real Chrome window.
 
 fal spend this evening, measured from the balance: 4.8456 -> 4.5456, so $0.30.
+
+## 2026-09-21 — task 40: no gate skip
+
+**The question.** The entry two sections above records that an agent pushed a red
+gate the same evening by setting `SF_SKIP_GATE`. That variable was meant to be a
+recorded-and-reasoned exception, not a routine way around the gate, but a variable
+that turns the gate off is a variable that will get set again under time pressure.
+This task removed it: the only way a push reaches origin/main is a green run of
+`scripts/ci.py`.
+
+**What the override looked like.** `.githooks/pre-push` had a branch: if
+`SF_SKIP_GATE` was set to any non-empty string, the hook skipped running
+`scripts/ci.py` entirely, appended a "GATE SKIPPED" note naming the reason and the
+commit to `HANDOFF.md`, and exited 0 — the push went through with the gate never
+run. `scripts/ci.py` itself never read this variable; the branch lived only in the
+hook, so there was nothing to remove there once that was confirmed.
+
+**What was removed.** The `if [ -n "$SF_SKIP_GATE" ]; then ... fi` block and its
+two comment paragraphs, from `.githooks/pre-push`. The refusal message's mention of
+the skip command was removed too, so nobody reads a hint for a command that no
+longer does anything. Nothing else in the hook changed: it still resolves the repo
+root, still finds `.venv/Scripts/python.exe` first and falls back to plain
+`python`, still runs `scripts/ci.py` and refuses on a non-zero exit.
+
+**Proof the hook still lets a genuine green push through**, done before trusting
+the edited hook with this task's own push: `tests/test_no_gate_skip.py` runs the
+real `.githooks/pre-push` file as a subprocess, cwd set to a throwaway git
+repository (its own commit, its own `HANDOFF.md`, no relation to this repo) holding
+a stand-in `scripts/ci.py` that just calls `sys.exit(0)` or `sys.exit(1)` — a real
+process, a real exit code, not a marker read out of the hook's source. Before the
+fix, a red stand-in gate with `SF_SKIP_GATE` set exited 0 (the old bypass); after
+the fix it exits 1, identically to the case with the variable unset. A green
+stand-in gate exits 0 in both cases. Failing-then-passing pytest lines below.
+
+Before (against the unedited hook):
+
+    .venv\Scripts\python.exe -m pytest tests/test_no_gate_skip.py -q
+      FAILED tests/test_no_gate_skip.py::test_a_green_gate_still_lets_the_push_through[because I said so]
+        assert 128 == 0  (git rev-parse --short HEAD failed in the scratch repo before a commit existed)
+      FAILED tests/test_no_gate_skip.py::test_the_variable_changes_nothing_about_the_outcome
+        assert 1 == 128
+      2 failed, 3 passed in 2.16s
+
+    (scratch repo given an initial commit so the old hatch's own `git rev-parse
+    --short HEAD` could run instead of crashing, then re-run against the still-
+    unedited hook to get the real bypass, not a git error standing in for one:)
+      FAILED tests/test_no_gate_skip.py::test_a_red_gate_is_refused_whether_or_not_the_variable_is_set[because I said so]
+        assert 0 != 0   (the old hatch let a red gate through with exit 0)
+      FAILED tests/test_no_gate_skip.py::test_the_variable_changes_nothing_about_the_outcome
+        assert 1 == 0
+      2 failed, 3 passed in 3.57s
+
+After (hatch removed from `.githooks/pre-push`):
+
+    .venv\Scripts\python.exe -m pytest tests/test_no_gate_skip.py -q
+      5 passed in 3.79s
+
+`tests/test_pre_push_hook.py` also carried a test asserting the escape hatch
+existed and wrote to `HANDOFF.md`. That test was removed along with the paragraph
+in its module docstring describing the hatch, since asserting a deleted feature is
+still there is not a test anybody wants green. The file's other five tests (hook
+versioned and executable, hook runs the gate and refuses on red, `core.hooksPath`
+set, hook executable in the index, bootstrap.py wires it up) are unchanged and
+still pass.
+
+**Local checks:**
+
+    .venv\Scripts\python.exe -m pytest tests/test_pre_push_hook.py tests/test_source_scanners.py tests/test_no_gate_skip.py -q
+      22 passed in 3.75s
+
+**Check output** (`.venv\Scripts\python.exe scripts\ci.py`, run from inside the
+`wt-40` worktree, using the interpreter at
+`C:\Users\KEVIN\dev\studioface-v2\.venv\Scripts\python.exe` because this worktree
+has no `.venv` of its own):
+
+    805 passed, 144 skipped, 2 warnings in 81.35s
+    WORKFLOW LINT: ok (every workflow can run, every step is mirrored or cloud-only)
+    OK: all assets within limits
+    DESIGN AUDIT: 0 P0, 0 P1, 0 P2   PASS
+    SKIP docker build: docker is not on PATH
+    CI MIRROR GATE: green in 205s
+
+**`scripts/ci.py`.** The task named it alongside the hook as a place to remove the
+escape hatch from. It was never there — grepped the whole repository outside `.git`
+and the only hits are the hook itself, this HANDOFF.md's own history, the queue
+file for this task, and `tests/fixtures/offenders/offenders.sh` (an unrelated
+worked example fed to a comment-scanning test, not real hook logic). Nothing to
+remove in `scripts/ci.py`; noted rather than silently skipped.
+
+**CLAUDE.md.** Added lesson 11: one worktree per task, `..\wt-<task>` beside this
+checkout, every edit/test/commit/push for that task inside it, main checkout for
+reading only while a task worktree is open.
+
+**Not changed:** colours, fonts, the home page's first-screen layout, the consent
+script, the GA4 id, the four delivery prompts, payment provider, hosting, price,
+Google Cloud permissions, the free-preview limit (still three per visitor per
+hour). No new dependency. No Google Ads tag, no campaign change. No production
+request was made by this task, so no risk of a real charge or an email being sent
+before the push below.
+
+**Deploy:** see the deploy run and revision recorded below once the push watch
+completes.
+
+## 2026-09-22 — task 41: credit-runs-out
+
+**The question, answered from the actual code.** `Pipeline._generate` (app/core.py)
+built four fal jobs per wave and ran them through `_attempt`, which caught EVERY
+exception — a content refusal, a locked account, a dead provider, all identical —
+logged it, and counted it as one spent attempt of the order-level retry budget. A
+locked account fails every one of those calls the same way, so the order burned the
+full `n_images + extra_attempts` budget (8 calls) before falling through to the
+existing "could not produce four images" branch. So: **the customer WAS already
+refunded automatically** (the existing `_refund` + cancellation email, because that
+branch requires no credit-specific handling — it just sees zero deliverable images).
+**Kevin was told nothing** — no code path connected a fal failure to an email to him.
+**The shop kept selling** — nothing set `store.killswitch`, so the very next paid
+order repeated the identical eight wasted calls and refund, forever, until a human
+happened to check the fal dashboard. At roughly $4.50 of credit and a dozen orders
+per dollar, that is the whole day's orders silently refunded with no one told.
+
+**fal's own documentation has no shape for this.** Sent the researcher agent at
+fal.ai's errors/request-errors/FAQ pages and the fal_client SDK source before writing
+any code (docs/verified.md, 22 Sep 2026). Confirmed: no status code, no error `type`
+string, nothing beyond the FAQ's own prose — "When your credit balance drops below
+your account's lock threshold, your account is locked and API requests will be
+rejected." So `app/adapters/fal.py`'s `_is_billing_refusal` is written and commented
+as a heuristic, not a vendor contract: one of fal's own documented authorization codes
+(401/403) or the conventional 402, together with a credit/balance/lock hint in
+whatever fal actually sent — narrow enough that an ordinary bad-API-key 403 does not
+trip it (tests/test_credit_exhausted.py holds both a refused case and a through case
+for this).
+
+**The fix is one design, not a patch in one place.** `FalModel.edit` raises the new
+`BillingRefused` (distinct from `ModelRefused` — a content refusal is the visitor's
+to fix, this one is ours) instead of letting the raw fal exception propagate.
+`Pipeline._attempt` re-raises it instead of swallowing it, so `_generate` stops
+within the wave it happened in rather than burning the rest of the retry budget
+finding out four more times the same way. `Pipeline._handle_credit_exhausted` then:
+refunds the order through the EXACT same `_refund` method every other undeliverable
+order uses, sends the customer the EXACT same cancellation email
+(`REFUND_EMAIL_SENTINEL`, the same string `emails.refund()` already mapped), sets
+`store.killswitch = True` (the same switch `/api/preview` and `/api/checkout` already
+check and refuse 503 on — no new guard needed there), and — only on the transition
+from off to on, so a second order caught by the same outage refunds silently instead
+of paging Kevin twice for one incident — sends one email to the new
+`OWNER_ALERT_EMAIL` setting through the same `send_email` port and the same
+`emails.py` shell/button styling the delivery and cancellation emails already use
+(`emails.owner_alert`, reached through `for_body`'s existing sentinel-sniffing, the
+same pattern `REFUND_SENTINEL` already used). The page: `upload-form.tsx` reads
+`GET /health`'s existing `killswitch` field once on mount and, only once confirmed
+true, swaps both the free-preview button and the buy button for
+"Estamos sin capacidad ahora mismo. Vuelve en unas horas." — the server-side 503 is
+what actually protects the money either way; this only saves a wasted click. A failed
+or slow health check never blocks the funnel (fails open to the page working exactly
+as before this task).
+
+**Known simplification, stated rather than hidden.** The owner alert's order count is
+always the count at the moment of the alert (1, for the order that flipped the
+switch). A genuine race — two orders discovering the lockout in the same instant,
+before either sets the switch — would under-report by one in the rare case both see
+`killswitch=False` simultaneously; Cloud Run's concurrency cap (4 per instance) makes
+this unlikely but not impossible, and it is not something this task's tests exercise
+with real concurrency. `OWNER_ALERT_EMAIL` also does not yet have a value in GitHub
+Actions (`vars.OWNER_ALERT_EMAIL` is wired in deploy.yml but unset), so until Kevin
+sets it the alert is silently skipped (by design — same convention as an unconfigured
+`GA4_MEASUREMENT_ID`) and only the refund and the kill switch take effect. **needs
+Kevin:** set the `OWNER_ALERT_EMAIL` repository variable in GitHub -> Settings ->
+Secrets and variables -> Actions -> Variables, to the address that should receive
+this alert (a plain variable, not a secret).
+
+**Failing first:**
+
+    (implementation files stashed to reproduce the pre-fix state)
+    tests/test_credit_exhausted.py:38: in <module>
+        from app.core import (
+    ImportError: cannot import name 'OWNER_ALERT_PREFIX' from 'app.core'
+
+Passing after the fix:
+
+    .venv\Scripts\python.exe -m pytest tests/test_credit_exhausted.py -q
+      10 passed in 0.16s
+
+**Local checks** (`.venv\Scripts\python.exe scripts\ci.py`, run from inside the
+`wt-41` worktree, using the interpreter at
+`C:\Users\KEVIN\dev\studioface-v2\.venv\Scripts\python.exe` because this worktree
+has no `.venv` of its own):
+
+    816 passed, 144 skipped, 2 warnings in 76.94s
+    WORKFLOW LINT: ok (every workflow can run, every step is mirrored or cloud-only)
+    OK: all assets within limits
+    DESIGN AUDIT: 0 P0, 0 P1, 0 P2   PASS
+    SKIP docker build: docker is not on PATH
+    CI MIRROR GATE: green in 183s
+
+`terraform validate` (read-only; init with `-backend=false`, no real GCP state or
+credentials touched, `infra/.terraform/` is gitignored and left in place):
+
+    Success! The configuration is valid.
+
+**Every guard's two cases**, in tests/test_credit_exhausted.py: a locked-account
+error is refused into `BillingRefused` (`test_a_locked_account_raises_billing_refused`,
+`test_a_402_with_balance_wording_is_also_billing_refused`) and an ordinary outage or
+an unrelated 403 gets through unchanged (`test_an_ordinary_outage_is_not_billing_refused`,
+`test_a_403_without_billing_wording_is_not_billing_refused`); at the pipeline level, a
+credit refusal refunds/kills/notifies-once
+(`test_a_credit_refusal_refunds_kills_and_notifies_once`) and a transient fal error
+keeps the existing full-retry-budget behaviour and never touches the switch
+(`test_an_ordinary_transient_fal_error_keeps_retrying_and_does_not_kill`, pinning the
+same numbers as tests/test_generation.py's
+`test_total_outage_still_refunds_and_never_exceeds_the_budget` so this task cannot
+regress it).
+
+**Not changed:** colours, fonts, the home page's first-screen layout, the consent
+script, the GA4 id, the four delivery prompts, payment provider, hosting, price, the
+free-preview limit (still three per visitor per hour). No new dependency. No Google
+Ads tag, no campaign change. No real Google Cloud secret was read, printed or
+touched — `OWNER_ALERT_EMAIL` is wired as a plain Cloud Run environment variable in
+infra/gcp.tf, never `google_secret_manager_secret`. `terraform apply` was never run;
+only `terraform validate` (read-only, no backend). No production request was made by
+this task — no purchase, no email sent from a live deployment — so no risk of a real
+charge before the push below.
+
+**Deploy:** see the deploy run and revision recorded below once the push watch
+completes.
+
+## 2026-09-22 — task 42: daily-money-stops
+
+**Two unattended stops under paid ad traffic, both next to the mechanisms task 41
+already built, neither a new one.**
+
+**1. Daily order ceiling (20 paid orders/UTC day).** The counter and the refusal sit
+in `Pipeline.admit(order)` (app/core.py), called from app/main.py's `_fulfil_session`
+— the ONE place, shared by the Stripe webhook (`_handle_paid`) and the post-payment
+redirect (`/api/gracias`), where a paid Checkout Session actually becomes an Order.
+Not at `/api/checkout`: hitting that route costs a visitor nothing and Stripe may
+never complete the payment behind it, so counting there would cap browser visits,
+not orders that took money — the thing this stop exists to cap. `admit` runs after
+the existing idempotency guards (`store.get(session_id)`, `claim_event`) and before
+the order is stored or `d.enqueue` is called, using a new `DailyOrderCeiling`
+(app/guards.py) that is exactly `RateLimiter`'s own shape: the same `Counter`
+protocol, `increment_if_below` on a per-UTC-day key (`orders:<day>`, its own
+namespace so it can never eat or be eaten by `RateLimiter`'s `g:<day>` preview
+budget), Firestore-backed in production (`FirestoreCounter`, reused unmodified),
+in-memory in tests (`MemoryCounter`, reused unmodified).
+
+Stripe has already taken the money by the time `_fulfil_session` runs, so "refuse"
+cannot mean "decline the payment" — it means the order that goes over the ceiling is
+refunded instead of generated. `admit` calls the exact same `_refund` every other
+undeliverable order uses, sends the customer the exact same cancellation email, and —
+the same off-to-on transition `_handle_credit_exhausted` already uses — sets
+`store.killswitch` (closing `/api/checkout` and `/api/preview` to every order after
+this one, no new guard needed there) and pages Kevin once through the exact same
+`send_email` port and `_shell`/`_button` styling, with a new sentinel
+(`DAILY_CEILING_ALERT_PREFIX`, mirrored in app/core.py and app/emails.py and held
+equal by a test, same convention as `OWNER_ALERT_PREFIX`). A Stripe webhook retry for
+the refused session lands on the existing `store.get(session_id) is not None` guard
+(the order is stored, as `failed_refunded`) — no second refund, no second page.
+
+**2. Refund-rate alarm (3+ refunds/UTC day, does not stop the shop).** Counted inside
+`Pipeline._refund` itself — the one method EVERY refund path already calls: an
+ordinary undeliverable order, task 41's fal-credit lockout, and this task's new
+daily-ceiling refusal. Each caller now names a `reason` string
+(`"undeliverable"`/`"fal_credit"`/`"daily_ceiling"`); `_refund` passes it to the new
+`_tally_refund`, which asks `OrderStore.record_refund(order_id, reason, day)` to
+append to today's tally and — the MOMENT the count first reaches
+`REFUND_ALARM_THRESHOLD` (3) — hand back the day's first three `(id, reason)` pairs.
+`record_refund` returns `None` every other time (before 3, and for the 4th, 5th, ...
+refund of the same day), so `_tally_refund` sends the one page-Kevin email — a new
+`REFUND_ALARM_PREFIX` sentinel, same mirrored-constant-plus-equality-test convention
+— exactly once. It never reads or writes `store.killswitch`: three refunds in a day
+is "go look", not "stop selling", so the shop keeps taking orders.
+
+`OrderStore.record_refund` (in-memory) is a plain dict-of-lists-plus-a-seen-set, the
+same shape `claim_event`'s `_events` set already uses.
+`FirestoreOrderStore.record_refund` (app/entry.py) is read-then-write on one document
+per day (`config/refund_tally_<day>`) — NOT a Firestore transaction like
+`FirestoreCounter`. Tried the transaction first; `tests/test_money_path.py` (real
+`FirestoreOrderStore` against `tests/fake_firestore.py`, which has no
+`.transaction()`) broke immediately, and the honest fix is not a bigger fake — this
+is an alert, not a ceiling money depends on, so it gets the same accepted race
+task 41's HANDOFF entry already documents for the credit-exhaustion alert: two
+refunds landing in the same instant on two instances could under-count by one and
+delay the alert to the next refund; it can never fire twice for the same crossing.
+
+**Boundary, read from the actual order flow before writing anything:**
+`app/main.py:_fulfil_session` is the single place `_handle_paid` (the
+`checkout.session.completed` webhook) and the `/api/gracias` redirect both turn a
+paid session into an Order, already idempotency-guarded there (`FULFIL_PREFIX`) for
+exactly this reason. `Pipeline.run` (invoked later, by the Cloud Task at
+`/internal/generate/{order_id}`) is too late — the order already exists and Stripe
+already has the money by then — and `/api/checkout` is too early — nothing has been
+paid yet. `tests/test_daily_stops.py`'s
+`test_the_21st_paid_session_through_the_post_payment_redirect_is_refunded_not_generated`
+drives this through the real `/api/gracias` route (not just `Pipeline.admit` in
+isolation) to prove the wiring, not only the arithmetic.
+
+**Failing first:**
+
+    .venv\Scripts\python.exe -m pytest tests/test_daily_stops.py -q
+    ImportError: cannot import name 'DAILY_CEILING_ALERT_PREFIX' from 'app.core'
+
+Passing after the fix:
+
+    .venv\Scripts\python.exe -m pytest tests/test_daily_stops.py -q
+      13 passed in 0.86s
+
+**Every guard's two cases**, in tests/test_daily_stops.py:
+`test_the_20th_paid_order_of_the_day_is_admitted` /
+`test_the_21st_paid_order_of_the_day_is_refused_refunded_and_pages_kevin_once` for
+the ceiling (plus a same-day-no-repeat case, a no-ceiling-configured cold start, and
+a UTC-day-rollover held-out check); `test_three_refunds_in_one_day_page_kevin_once_with_ids_and_reasons`
+/ `test_the_fourth_refund_the_same_day_does_not_page_kevin_again` for the alarm (plus
+fewer-than-three-never-pages, killswitch-untouched, no-owner-email-configured, and a
+held-out check that two refunds with DIFFERENT reasons are not relabelled the same).
+
+**Local checks** (`.venv\Scripts\python.exe scripts\ci.py`, run from inside the
+`wt-42` worktree, using the interpreter at
+`C:\Users\KEVIN\dev\studioface-v2\.venv\Scripts\python.exe` because this worktree
+has no `.venv` of its own):
+
+    829 passed, 144 skipped, 2 warnings in 76.27s
+    WORKFLOW LINT: ok (every workflow can run, every step is mirrored or cloud-only)
+    OK: all assets within limits
+    DESIGN AUDIT: 0 P0, 0 P1, 0 P2   PASS
+    SKIP docker build: docker is not on PATH
+    CI MIRROR GATE: green in 185s
+
+**Not changed:** colours, fonts, the home page's first-screen layout, consent logic,
+the GA4 id, the four delivery prompts, payment provider, hosting, price, the
+free-preview limit (still three per visitor per hour). No new dependency. No Google
+Ads tag, no campaign change. No real Google Cloud secret was read, printed or
+touched — no new Settings field: the 20/day and 3/day thresholds are dataclass
+defaults in app/guards.py and app/core.py, exactly like `RateLimiter`'s existing
+`per_client=3`/`daily_global=300`, not environment variables. No production request
+was made by this task — no purchase, no email sent from a live deployment — so no
+risk of a real charge before the push below.
+
+**Known simplification, stated rather than hidden.** `app/core.py` is now 498 lines,
+over this file's own 300-line clutter guideline (it was already 405 before this
+task, from task 41's addition) — `ruff` does not enforce a line-count rule, so
+nothing failed, but it is worth a deliberate split (guards/alerts/pipeline into
+separate modules) as a follow-up rather than doing it inside this task's diff, which
+the task asked to be exactly this and nothing else. The refund-tally read-then-write
+race above is the other one, carried forward from the same trade-off task 41 already
+accepted for the credit-exhaustion alert.
+
+**Deploy:** see the deploy run and revision recorded below once the push watch
+completes.
+
+## 2026-09-22 — task 43: kill-switch-reset
+
+**The gap.** `/internal/budget` (app/main.py) can only turn the kill switch ON --
+there was no documented way to turn it back OFF except by hand in the Firestore
+console, and no way at all from Kevin's phone.
+
+**The document, found before writing anything.** `app/core.py`'s `OrderStore`
+class comment names it directly: `self.killswitch: bool = False  # Firestore doc
+config/killswitch in prod`. `app/entry.py`'s `FirestoreOrderStore.killswitch`
+property/setter is the app's own read/write of it:
+`self.db.collection("config").document("killswitch").get()` /
+`.set({"on": on})`. Same path docs/GO-LIVE.md already prints in the clear -- not a
+secret, operational information about where a switch lives.
+
+**scripts/killswitch.py** adds `--status`, `--on`, `--off`. It calls
+`FirestoreOrderStore` itself (the exact class app/main.py's `/api/checkout` and
+`/api/preview` routes read `d.pipeline.store.killswitch` from) rather than writing
+a second path to the same document, so this script can never drift from what the
+app actually checks. `gcloud` is resolved with `shutil.which` through
+`scripts/_exec.py`'s `resolve`, the same fix `scripts/set_secret.py` uses for
+Windows' CreateProcess/PATHEXT gap, and before any write the script confirms
+`gcloud config get-value project` matches `studio-face-fresh-start`, so `--on`/
+`--off` can never hit the wrong Google Cloud project by accident.
+
+**Failing first:**
+
+    .venv\Scripts\python.exe -m pytest tests/test_killswitch_script.py -q
+    ModuleNotFoundError: No module named 'killswitch'
+
+Passing after the fix:
+
+    .venv\Scripts\python.exe -m pytest tests/test_killswitch_script.py -q
+      6 passed in 1.92s
+
+**Every guard's two cases**, in tests/test_killswitch_script.py: status on an
+untouched document reads selling (the empty case); status after the app itself
+writes the document reads the same value back
+(`test_status_reads_what_the_app_reads`); off after on leaves the document, and
+therefore the exact gate `/api/checkout`/`/api/preview` read, back to selling
+(`test_off_after_on_leaves_the_app_selling_again`); on/off/on in sequence each
+reads correctly (many); off when already off is a no-op, not an error, and on
+writes nothing but the one document (failure/held-out cases). No test calls the
+real `gcloud` binary or a real Firestore project -- every case runs against
+`tests/fake_firestore.py`, in process, same convention as
+tests/test_firestore_store.py.
+
+**Local checks** (`.venv\Scripts\python.exe scripts\ci.py`, run from inside the
+`wt-43` worktree, using the interpreter at
+`C:\Users\KEVIN\dev\studioface-v2\.venv\Scripts\python.exe` because this worktree
+has no `.venv` of its own):
+
+    CI MIRROR GATE: green in 177s
+
+**docs/GO-LIVE-KEVIN.md** gets a new "If the shop stops selling" section, appended
+after the existing content (not reordered or replaced), with the three commands
+and what each prints.
+
+**Not changed:** colours, fonts, the home page's first-screen layout, consent
+logic, the GA4 id, the four delivery prompts, payment provider, hosting, price,
+the free-preview limit, permissions in Google Cloud. No new dependency (reuses
+`google-cloud-firestore` and `app.entry.FirestoreOrderStore`, both already in the
+app). `--on` and `--off` were run only against `tests/fake_firestore.py` in this
+task's own test suite -- never against the real production kill switch, which
+really does stop or start the shop selling and is not this task's job to touch.
+No purchase was made and no email was sent by this task.
+
+**Deploy:** see the deploy run and revision recorded below once the push watch
+completes.
+
+## 2026-09-22 — task 44: old-links-through-a-real-mail-client
+
+**The gap**, named in task 31's own HANDOFF entry: "a real customer clicking a
+genuinely old-shape link... from outside, end to end through a real email client...
+was not [proven], because doing so would need a real delivered order and a real
+inbox." scripts/check_gallery_privacy.py already covers this against production
+(where the real GA4 id is configured); this task covers the automatable half, with
+a faked order and a faked image model, and closes two smaller test gaps next to it.
+
+**The browser case**, tests/e2e/test_upload_edges.py's new
+`test_old_shape_gallery_link_is_rewritten_before_analytics_and_leaks_no_key`.
+Opens `/g/?o=fake-order-old-mail-client&t=fake-token-old-mail-client-...` (both
+obviously made up) in a real browser, against the loopback server
+scripts/run_upload_edges.py already boots for this file. `/api/orders/{order}`
+(task 31's header-shape route — the only one frontend/src/app/g/page.tsx ever
+calls) is answered entirely inside the browser (`fake_delivered_order`, refusing a
+wrong token exactly like the real `_order_status_payload`, same technique as this
+file's existing `fake_preview`), because the loopback server's `OrderStore` starts
+empty every run with no way for this test process to seed it — the server runs in
+its own subprocess. The four photos are real JPEG bytes (`FACE`, already used
+elsewhere in this file) served from a fake path, so the `<img onLoad>` handler
+genuinely fires and "the four photos load" is a real assertion, not a guess from a
+broken image. The image model is never touched — this page does not call it, and
+scripts/run_upload_edges.py's two-layer guard (`NeverCallTheModel`,
+`NeverStoreEither`) still stands in front of `/api/preview` for every other test.
+
+Measured before writing the final assertions: `Analytics()` (components/
+consent.tsx) needed a non-empty GA4 id to render at all — it returns `null`
+otherwise — so scripts/run_upload_edges.py now bakes in `DUMMY_GA4_ID =
+"G-EDGETEST01"`, the same trick `DUMMY_SITE_KEY` already uses for Turnstile
+(tests/test_bootstrap.py's own `test_ga4_secret_regex_rejects_measurement_id`
+pins that this exact shape is a measurement id, not a secret, so it needed no
+assembly trick). The real production id stays only in frontend/.env.production /
+the GitHub variable deploy.yml writes — never touched here. Since every page in
+this file now mounts Analytics, the `page` fixture stubs every request to
+googletagmanager.com for every test, not only the new one, so this build never
+reaches Google for real regardless of which test runs (the same "cost: none, by
+construction" guarantee the module docstring already makes for the image model).
+
+A first, stricter draft of the test asserted the address bar was already rewritten
+before ANY request to a Google host, including gtag.js's own library file. Measured
+against a real navigation (a standalone debug script, not kept), that assertion was
+false: `.../gtag/js?id=G-EDGETEST01` — a static, public URL, the same on every page
+and every visitor — can be requested before GalleryLinkRewrite's
+`history.replaceState` finishes, because Next's `afterInteractive` scripts are
+ordered against a `beforeInteractive` one by execution time, not by when the
+browser happens to issue their network request. What actually matters, and is what
+the final assertions check, is the REPORTING hit — GA4's collect endpoint, carrying
+the page's own address in a `dl=` parameter — and the same measurement showed every
+one of those already carrying the clean, explicit override `Analytics()` sets for
+`/g/` (`window.location.origin+'/g/'`, never the raw address), and always after the
+rewrite. The final test asserts both properties directly: no request to any Google
+host, script file included, ever carries the fake order or token; and the address
+bar already shows the fragment shape at the moment every reporting hit (identified
+by its own `dl=`) leaves.
+
+Separately, `test_the_buy_button_is_visible_and_enabled_at_the_free_preview_limit`
+started failing once every page in this file carried the extra `afterInteractive`
+script — confirmed a regression from this task's own change, not a pre-existing
+flake, by re-running the unmodified file against the unmodified script (16/16
+passed) and then reproducing the failure twice in a row with only the GA4 change
+applied. The assertion itself was the fragile part: a bare `.is_visible()` read
+immediately after `.click()`, no auto-wait, unlike `expect_thumb_count`'s own
+`expect(...).to_have_count()` a few lines above it in the same file. Fixed with
+`expect(...).to_be_visible()`, the same auto-waiting pattern already used
+elsewhere in this file — not a behaviour change to the page, and green twice in a
+row afterward.
+
+**The two email tests**, tests/test_emails.py. app/core.py's `Pipeline.run` (the
+delivery email) and app/main.py's `/api/recuperar` (the recover email) both build
+`f"{GALLERY_BASE}#o={order_id}&t={token}"` and hand it to `send_email`, which
+app/entry.py routes through `emails.for_body` straight into `emails.delivery` —
+tests/test_money_path.py and tests/test_recuperar.py already prove each call site
+builds the fragment shape, but nothing had ever run that link through the actual
+TEMPLATE and checked what came out. `_real_gallery_link` imports `GALLERY_BASE`
+and `delivery_token` from app.core (not a retyped literal) so a change to either
+real construction is felt here too, then two tests —
+`test_the_delivery_email_renders_the_fragment_shape_never_the_query_shape` and
+`test_the_recover_email_renders_the_fragment_shape_never_the_query_shape` — each
+build a link for their own fake order id and assert `emails.for_body(link)`'s html
+and text contain the fragment shape and never `?o=`. Both passed on first write:
+`_shell`/`_button` interpolate the link with a plain f-string, no HTML-escaping
+that could have turned `&` into `&amp;` and silently broken the link, so this
+closes a coverage gap rather than a bug — stated plainly rather than staging an
+artificial failure.
+
+**The underline.** frontend/src/components/ad-landing.tsx's
+`data-recover-under-uploader` link — the "Recuperar mis fotos" link shared by
+/foto-cv/ and /foto-linkedin/ — was the one instance task 34's HANDOFF entry
+recorded as "checked and confirmed it does not carry the fix... not changed, since
+the task named the home page link only." Given `[text-decoration-skip-ink:none]`
+now, the identical Tailwind arbitrary property already proven on the header pair
+(components/site-header.tsx) and the home page's own third link (app/page.tsx) —
+no font, colour, layout or letter-spacing change. Confirmed in the built HTML
+(`getComputedStyle(...).textDecorationSkipInk === 'none'` against the real
+`frontend/out/foto-cv/index.html`, served locally, no production request) and by a
+device-scale-factor-3 screenshot of the rendered link. Same result as task 34's own
+measurement: the underline reads continuous in this automated Chromium both before
+and after the class is present — this environment has never reproduced the
+gap-after-"f" artefact the original audit found on a real desktop Chrome at native
+zoom, on any of the three links, so the visual improvement itself is still not
+independently provable here. The code change matches the proven fix exactly and is
+now live on all three links site-wide.
+
+**Failing first**, for the one genuine behaviour fix (the timing race, not the
+underline or the coverage-only tests):
+
+    tests/e2e/test_upload_edges.py::test_the_buy_button_is_visible_and_enabled_at_the_free_preview_limit FAILED
+    tests/e2e/test_upload_edges.py::test_old_shape_gallery_link_is_rewritten_before_analytics_and_leaks_no_key PASSED
+    1 failed, 16 passed in ...
+
+Passing after `expect(...).to_be_visible()`:
+
+    17 passed in 50.67s
+    17 passed in 50.54s   (re-run, to rule out a lucky pass)
+
+**The task's own check:**
+
+    .venv\Scripts\python.exe scripts\run_upload_edges.py
+      17 passed in 50.54s
+      built, and frontend/.env.production put back
+      rebuilding the real export ...
+
+**Local checks** (`.venv\Scripts\python.exe scripts\ci.py`, run from inside the
+`wt-44` worktree; this worktree had no `.venv`, `node_modules` or `frontend/out` of
+its own — `npm ci` was run once in frontend/ to install the pinned dependencies
+already in package-lock.json, no new dependency added):
+
+    950 passed, 32 skipped, 2 warnings in 97.21s
+    WORKFLOW LINT: ok (every workflow can run, every step is mirrored or cloud-only)
+    OK: all assets within limits
+    DESIGN AUDIT: 0 P0, 0 P1, 0 P2   PASS
+    SKIP docker build: docker is not on PATH
+    CI MIRROR GATE: green in 188s
+
+**Not run:** scripts/run_funnel.py. Its own docstring states the free-preview walk
+spends a real fal image ("Cost: one full walk spends about five fal images."); this
+task's own change to ad-landing.tsx is a single decorative CSS class on an anchor
+tag, touching nothing in Comparador, FoldCta or UploadForm, so it was not judged
+worth a real fal spend to re-prove. The static structure of /foto-cv/ and
+/foto-linkedin/ is covered without spending anything by `npm run build` (both
+routes still emit) and scripts/ci.py's design audit (0 P0/P1/P2), both green above,
+plus a local static-file screenshot check of the fixed link (no production request).
+
+**Not changed:** colours, fonts, the first-screen layout, consent logic (the
+rewrite and the explicit `/g/` `page_location` override are read, not edited), the
+GA4 id (the real one), the four delivery prompts, payment provider, hosting,
+price, the free-preview limit, permissions in Google Cloud. No new dependency
+(`npm ci` installs only what package-lock.json already pins). No Google Ads tag.
+No purchase was made and no production email was sent by this task; the one real
+outbound network call this task's own new test makes to an external host
+(`https://www.googletagmanager.com/gtag/js?id=G-EDGETEST01`, a public library file
+with no page data in it) is intercepted by the `page` fixture before it leaves the
+browser and never actually reaches Google.
+
+**Deploy:** see the deploy run and revision recorded below once the push watch
+completes.
+
+## 22 September 2026 — a test corrupted a real worktree during a real push, root-caused and fixed
+
+Two agents working on separate tasks tonight (task 44, and the corruption I found myself
+while cleaning up its worktree) hit the same incident independently: a worktree's own
+HANDOFF.md was found staged back down to one line, `core.bare` had been silently flipped
+to true, and several commits authored by "Test <test@example.com>" with the message
+"seed" appeared on a real task branch nobody had asked for.
+
+The cause: `tests/test_no_gate_skip.py` (added earlier tonight, task 40) builds a
+throwaway git repository to prove the pre-push hook has no escape hatch, then runs the
+real hook script against it as a subprocess. Git hooks receive `GIT_DIR` (and sometimes
+`GIT_WORK_TREE`) in their own process environment — this is normal, documented git
+behaviour, not a bug in git. The test's scratch-repo commands inherited that environment
+unfiltered. When the hook ran for real, as part of an actual push, instead of being run
+by hand, its nested `git init`/`add`/`commit` calls — run with `cwd` pointing at the
+scratch directory — were silently redirected by the inherited `GIT_DIR` to operate on the
+real repository's object database instead. `GIT_DIR` wins over `cwd` in git's own
+resolution order. That is how a throwaway "seed" commit and a one-line HANDOFF.md landed
+on a real branch, and very plausibly how `core.bare` got flipped along the way.
+
+Reproduced safely before trusting the fix: a disposable "ambient" repository stood in for
+what would have been the real one, `GIT_DIR`/`GIT_WORK_TREE` were pointed at it the same
+way a real hook invocation sets them, and the old code was shown to break exactly this
+way (running unmodified, unpatched, against a copy of the file kept outside the working
+tree — never against a real worktree). The fix strips every `GIT_*` variable from the
+environment before any of this file's own git subprocess calls, including the nested hook
+invocation. `tests/test_no_gate_skip.py::test_scratch_repo_ignores_an_ambient_git_dir` now
+pins this: it proves the throwaway repository commits into its own history and the
+"ambient" one's `HEAD` never moves.
+
+No real work was lost. Both incidents happened inside disposable task worktrees, which
+this session's own new work-tree-per-task rule (also task 40) exists to make safe to
+discard — and both were discarded rather than repaired. The bookkeeping commits that
+already reached `main` before either incident are untouched and correct; verified with a
+full run of `scripts/ci.py` on the real checkout both before and after this fix, and by
+confirming the corrupted branches were never an ancestor of `main`.
+
+Consequence for tonight's queue: every push before this fix landed cleanly on `main`
+regardless (confirmed one by one), so nothing already deployed needs re-checking. Every
+push after this fix runs through the corrected hook.
+
+## 22 September 2026 — task 46: funnel-report-and-kill-rule
+
+**The gap.** The ad test (task 33's `docs/ads/CAMPAIGN.md`) had a stop rule but
+no script to read the numbers it needs, and no pre-registered numbers for the
+150 EUR, three-step version of the test Kevin gave verbatim tonight.
+
+**scripts/funnel_report.py**, read-only against Firestore -- every call is
+`.get()` or `.stream()`, never `.set()`/`.create()`/a transaction, and no order
+is ever touched. Per UTC day it prints previews requested/produced, orders
+paid, orders delivered, orders refunded, and the two derived ratios (paid per
+preview, previews per checkout) the kill rule reads, plus the image cost per
+order and the batches-stored total as separate lines. What it actually reads
+and why, spelled out in the module's own docstring rather than here:
+
+- previews requested/produced both read `counters/g:<day>`
+  (`guards.RateLimiter`'s daily global counter) -- the SAME document, because
+  `RateLimiter.refund` decrements it the instant a failed preview is refunded
+  (app/main.py), so Firestore keeps only the net value and a failed-then-
+  refunded attempt is indistinguishable from one that never happened.
+- orders paid reads `counters/orders:<day>` (`guards.DailyOrderCeiling`, task
+  42's wiring in app/entry.py's `build()`).
+- orders delivered/refunded scan the `orders` collection, bucketed by
+  `Order.started_at` -- the one timestamp already on the document, set by
+  `Pipeline.run` before it ever calls the model, for both a delivered order
+  and every ordinary refund. The one gap: an order refused outright by the
+  daily ceiling never reaches `run()` and so has no `started_at` to bucket by
+  -- named in the docstring, not hidden, and irrelevant at this budget's scale
+  (the ceiling is 20 orders/day; step 3 of the pre-registered test kills at
+  fewer than 8 total).
+- checkout sessions created, and therefore previews per checkout, are printed
+  as "not available": `/api/checkout` (app/main.py) writes nothing to
+  Firestore, and the only record of a started checkout is the browser-only GA4
+  event `begin_checkout` (frontend/src/lib/track.ts), which a server-side
+  script cannot read. Same honesty this task's own brief already applied to
+  landing visits by page, extended to the one more place it was found true.
+- image cost per order is a flat figure, not a Firestore read: `Pipeline`'s
+  own `n_images` (4) times docs/verified.md's measured fal price ($0.08 per
+  1K-resolution image, 2026-09-16) = $0.32, independent of any one day's
+  order count.
+- batches stored at the limit (`guards.RateLimiter.check_store`'s `store:*`
+  counters) carries no UTC-day key at all -- reported once as a current
+  total, not scoped to the requested range.
+
+tests/fake_firestore.py gained `FakeSnapshot.id` and `FakeCollection.stream()`
+(mirroring real `firestore.DocumentSnapshot.id` /
+`CollectionReference.stream()`) so the report can sum every `store:*` counter
+and walk every order with no equality filter to key off. Additive: no existing
+caller reads `.id`, and every prior test using this fake still passes
+unchanged.
+
+**Failing first:**
+
+    ModuleNotFoundError: No module named 'scripts.funnel_report'
+    1 error in 0.19s
+
+**Passing after:**
+
+    tests/test_funnel_report.py::test_a_day_with_two_paid_orders_and_one_refund_is_reported_correctly PASSED
+    tests/test_funnel_report.py::test_an_empty_range_prints_zeros_not_an_error PASSED
+    tests/test_funnel_report.py::test_a_reversed_range_renders_no_rows_instead_of_crashing PASSED
+    3 passed in 0.18s
+
+The third test is the one check not asked for: a reversed date range (the
+likeliest way a date-parsing mistake would actually break this) renders an
+empty table rather than raising.
+
+**docs/ads/CAMPAIGN.md** gets a new "Pre-registered test" section, dated
+2026-09-22, with the 150 EUR / three-step budget and kill numbers Kevin gave
+verbatim -- unchanged wording, written before any campaign exists, so they
+cannot be adjusted after seeing how the campaign performs. `Settled` and
+`Stop rule` above it (the original 50 EUR, single-step version) were left
+untouched -- not asked for, and reconciling the two is Kevin's call.
+
+**Also fixed, found while running this task's own gate:** `git config
+core.hooksPath` on this shared clone (all three worktrees open tonight,
+`studioface-v2`/`wt-45`/`wt-46`, share one `.git` and therefore one config)
+had drifted to an absolute path, failing
+`tests/test_pre_push_hook.py::test_git_is_actually_pointed_at_the_versioned_hooks`
+-- reproduced first on the untouched `main` checkout to confirm this task did
+not cause it, then reset with the exact command `bootstrap.py`'s `git_push`
+already runs, `git config core.hooksPath .githooks` (HANDOFF's own 18 Sep
+self-heal entry covers why this must be the relative string).
+
+**Local checks** (`C:\Users\KEVIN\dev\studioface-v2\.venv\Scripts\python.exe
+scripts\ci.py`, run from inside the `wt-46` worktree, which has no `.venv` of
+its own):
+
+    850 passed, 145 skipped, 2 warnings in 104.30s (pytest)
+    WORKFLOW LINT: ok (every workflow can run, every step is mirrored or cloud-only)
+    OK: all assets within limits
+    DESIGN AUDIT: 0 P0, 0 P1, 0 P2   PASS
+    SKIP docker build: docker is not on PATH
+    CI MIRROR GATE: green in 104s
+
+**Not run:** the script against real production Firestore. It is read-only
+(reads existing counters and order records, writes nothing, sends no email,
+costs nothing), but running it was not needed to prove the failing-test-first
+work above, and no campaign or order exists yet for it to report on.
+
+**Not changed:** colours, fonts, the first-screen layout, consent logic, the
+GA4 id, the four delivery prompts, payment provider, hosting, price,
+permissions in Google Cloud, the free-preview limit of three. No Google Ads
+tag. No campaign created -- this task only writes files, as its own docstring
+and `docs/ads/CAMPAIGN.md`'s opening line both already say.
+
+**Deploy:** see the push and revision recorded below once this run completes.
+
+## 22 September 2026 (later) — the shop is safe to leave running under paid traffic
+
+Six of seven tasks green, deployed. The seventh — proving the free-preview limit and
+the reload-survival path by driving a real browser against production — ran for over
+two hours with no commit, no file written, and no change in the fal account balance,
+and did not answer a direct status check. Left in work/queue/, not silently dropped.
+The most likely cause, and it is only a likely cause, not a confirmed one: production's
+Turnstile widget is the real one, not the always-pass test key the local browser test
+uses, and every run of the production monitor tonight — including the one at the very
+end of this session — reports the same thing about it: "BLOCKED — free preview — needs
+a Turnstile token; production presents an interactive challenge by design." If that
+widget genuinely cannot be solved by an automated browser, this task cannot be finished
+by an agent at all; it needs Kevin, by hand, in a real browser, spending about 0,36 US
+dollars of his own free previews to watch the limit message and the reload both work.
+If the agent that was running it eventually reports back, its result will be added here.
+
+A second, more serious thing happened tonight and is recorded in the section above this
+one: a test corrupted two real worktrees during a real push (not this stuck task — two
+earlier ones). It is fixed and proven, and every push after the fix went through clean.
+
+What is now live: no more way to skip the local check before a push (task 40); a fal
+billing lockout auto-refunds, stops the shop and pages Kevin, once (task 41) — but
+`OWNER_ALERT_EMAIL` has no value set in GitHub Actions yet, so that email cannot
+actually send until Kevin sets it; a daily cap of 20 paid orders and a refund-rate
+alarm at 3 refunds a day (task 42); scripts/killswitch.py lets Kevin turn the shop back
+on from his phone without needing to open a console (task 43); the old gallery link
+shape is proven clean through a simulated real-browser open, never a Google host, and
+the last unfixed underline link is fixed the same way as the rest (task 44);
+scripts/funnel_report.py reads the numbers the ad test's kill rule needs, and
+docs/ads/CAMPAIGN.md now states that rule in the exact words asked for, dated, before
+any campaign exists (task 46).
+
+fal balance across this run: 4.5456 -> 4.4856, six cents, spent entirely by the closing
+browser test of the shop (the retry-after-reset case). Task 45 spent nothing.
