@@ -59,6 +59,21 @@ from app.main import THANKS_PATH, make_app
 SITE_KEY_ENV = "FUNNEL_TURNSTILE_SITEKEY"
 TURNSTILE_ENV = "FUNNEL_TURNSTILE_SECRET"
 
+# Cloudflare's published always-passes secret, and the hostname its siteverify always
+# answers with. Measured against Cloudflare on 22 Sep 2026 (docs/verified.md): the dummy
+# secret reports "example.com" whatever host really served the widget, so this harness
+# cannot check a dummy token against the 127.0.0.1 it serves - every /api/preview in the
+# walk answered 403 until this existed. Narrow by construction: the dummy secret accepts
+# EVERY token anyway, so trusting its hostname concedes nothing it had not already
+# conceded. Production (app/entry.py) is untouched and still expects the real host.
+DUMMY_SECRET = "1x" + "0" * 31 + "AA"
+DUMMY_HOSTNAME = "example.com"
+
+
+def expected_turnstile_hostname(secret: str, base: str) -> str:
+    return DUMMY_HOSTNAME if secret == DUMMY_SECRET else hostname_of(base)
+
+
 FILES_PREFIX = "/__files__"
 LOCAL_SCHEME = "gs://local/"
 
@@ -241,7 +256,7 @@ def build_funnel_app(static_dir: Path, storage_dir: Path, base: str) -> Any:
         webhook_secret=os.environ["STRIPE_WEBHOOK_SECRET"],
         tasks_token=tasks,
         verify_turnstile=lambda token, ip: verify_turnstile(
-            turnstile, token, ip, hostname_of(base)
+            turnstile, token, ip, expected_turnstile_hostname(turnstile, base)
         ),
         retrieve_session=_test_retriever(),
         sign_url=storage.sign,

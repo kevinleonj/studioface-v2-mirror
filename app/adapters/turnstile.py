@@ -34,9 +34,10 @@ def verify_turnstile(secret: str, token: str, remote_ip: str, expected_hostname:
     here just as well as one solved on studioface.app; `secret` alone does not tell
     Cloudflare which site solved the challenge, only which ACCOUNT owns the widget.
     `expected_hostname` is a parameter, not a literal, because the site this runs on
-    is not always studioface.app — the local funnel walk (scripts/run_funnel.py)
-    solves the real dummy widget at 127.0.0.1 and must verify against that host, not
-    a production one it was never served from.
+    is not always studioface.app. What that host is for the local funnel walk is NOT
+    127.0.0.1, as this said until task 75: Cloudflare's dummy secret reports a constant
+    "example.com" wherever the widget was really solved (measured 22 Sep 2026), so the
+    walk's harness passes that instead - tests/e2e/funnel_app.expected_turnstile_hostname.
     """
     if not token:
         return False
