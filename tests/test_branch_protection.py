@@ -83,6 +83,7 @@ def test_required_status_checks_are_absent_and_the_reason_is_written_down():
     assert "self-heal" in comment, "the reason for the absence is not recorded beside it"
 
 
+@pytest.mark.mirror_incompatible(reason="reads .github/workflows, which the mirror does not carry")
 def test_the_healer_really_does_push_to_main_so_the_reason_is_not_hypothetical():
     """If self-heal stops pushing, the argument above expires and required status checks
     should be reconsidered. This fails when that day comes."""

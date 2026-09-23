@@ -57,6 +57,9 @@ def test_the_hook_runs_the_gate_and_refuses_on_red():
     os.environ.get("CI") == "true",
     reason="core.hooksPath is developer-machine config; a CI checkout has none and never pushes",
 )
+@pytest.mark.mirror_incompatible(
+    reason="a fresh clone has no core.hooksPath; the private repo's bootstrap sets it"
+)
 def test_git_is_actually_pointed_at_the_versioned_hooks():
     """The file existing proves nothing: git only runs it when core.hooksPath says so.
 
@@ -78,6 +81,9 @@ def test_git_is_actually_pointed_at_the_versioned_hooks():
     )
 
 
+@pytest.mark.mirror_incompatible(
+    reason="the mirror is committed from Windows, so the hook loses its executable bit"
+)
 def test_the_hook_is_executable_in_the_index_so_git_does_not_ignore_it():
     """Measured, not reasoned. Pushing this repo printed:
 

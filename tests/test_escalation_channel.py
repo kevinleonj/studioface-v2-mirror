@@ -38,6 +38,7 @@ def test_the_repository_accepts_issues():
     )
 
 
+@pytest.mark.mirror_incompatible(reason="reads .github/workflows, which the mirror does not carry")
 def test_the_healer_workflow_can_open_one():
     """Held-out check: the other end of the same channel. self-heal.yml's prompt ends
     with "open a GitHub issue", which needs the issues: write permission on the job's

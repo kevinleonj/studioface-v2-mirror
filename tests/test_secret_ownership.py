@@ -86,6 +86,7 @@ def test_terraform_declares_exactly_one_version_resource_for_each():
         assert any(h in key or key.startswith(h) for h in hits), f"{secret} has no owner"
 
 
+@pytest.mark.mirror_incompatible(reason="reads .github/workflows, which the mirror does not carry")
 def test_the_version_resource_tracks_the_endpoint_in_the_applied_state():
     """This is the go-live trap, asserted rather than only described in prose. The
     secret's value follows whichever webhook endpoint the applied state holds, and CI

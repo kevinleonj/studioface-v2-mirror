@@ -50,6 +50,7 @@ def jobs(path: Path) -> dict[str, str]:
     return found
 
 
+@pytest.mark.mirror_incompatible(reason="reads .github/workflows, which the mirror does not carry")
 def test_there_are_workflows_to_check():
     assert WORKFLOWS, "no workflow files found; every assertion below would pass vacuously"
 
@@ -81,6 +82,7 @@ def emulator_jobs() -> list[tuple[str, str, str]]:
     ]
 
 
+@pytest.mark.mirror_incompatible(reason="reads .github/workflows, which the mirror does not carry")
 def test_some_job_actually_runs_the_emulator_test():
     """Without this, tests/test_counter_atomicity.py is five permanent skips."""
     assert emulator_jobs(), (
@@ -120,6 +122,7 @@ def test_the_job_installs_the_emulator_and_picks_a_java_the_emulator_accepts():
 # ---------------------------------------------------------------- the design floor
 
 
+@pytest.mark.mirror_incompatible(reason="reads .github/workflows, which the mirror does not carry")
 def test_some_job_runs_the_design_audit_against_a_built_export():
     """The audit only means anything if it runs on a real build. Lighthouse scored the
     previous design 96 and Playwright passed on it; neither could see that it was
@@ -158,6 +161,7 @@ def gate_jobs() -> list[tuple[str, str, str]]:
     ]
 
 
+@pytest.mark.mirror_incompatible(reason="reads .github/workflows, which the mirror does not carry")
 def test_the_gate_step_is_found_by_reading_steps_and_not_prose():
     """Held-out check on the matcher. It must find the real gate jobs and must NOT find
     self-heal.yml, which talks about the gate without ever running it."""
@@ -220,6 +224,7 @@ def test_every_job_that_runs_the_suite_ends_up_with_a_browser():
 # ---------------------------------------------------------------- the healer
 
 
+@pytest.mark.mirror_incompatible(reason="reads .github/workflows, which the mirror does not carry")
 def test_the_healer_does_not_heal_a_commit_main_has_already_moved_past():
     """Observed on 2026-09-17: three self-heal runs fired against SHAs that main had
     already superseded, in a session that was actively pushing fixes. Each one checks

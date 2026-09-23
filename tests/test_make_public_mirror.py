@@ -14,6 +14,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 OWNER_EMAIL = "OWNER_EMAIL_REDACTED"
 
@@ -28,6 +30,9 @@ def script():
     return mod
 
 
+@pytest.mark.mirror_incompatible(
+    reason="the owner's address it feeds the redactor is already redacted in the mirror"
+)
 def test_owner_email_is_redacted():
     mod = script()
     text = f"gcp_account = {OWNER_EMAIL}\nrua=mailto:{OWNER_EMAIL}"
@@ -41,6 +46,9 @@ def test_unrelated_email_passes_through_untouched():
     assert mod.redact(text) == text
 
 
+@pytest.mark.mirror_incompatible(
+    reason="the owner's address it feeds the redactor is already redacted in the mirror"
+)
 def test_owner_email_is_redacted_even_right_after_a_literal_backslash_n():
     """tests/test_bootstrap.py carries the address straight after a literal \\n
     inside a Python string, so a word-boundary anchor in front of the pattern would
@@ -51,6 +59,9 @@ def test_owner_email_is_redacted_even_right_after_a_literal_backslash_n():
     assert OWNER_EMAIL not in mod.redact(text)
 
 
+@pytest.mark.mirror_incompatible(
+    reason="the owner's address it feeds the redactor is already redacted in the mirror"
+)
 def test_script_source_does_not_carry_the_address_as_one_substring():
     """This script is itself a tracked file with no DROP rule excluding it, so it is
     copied into the public mirror. Its own source must never spell the address out as
@@ -59,6 +70,9 @@ def test_script_source_does_not_carry_the_address_as_one_substring():
     assert OWNER_EMAIL not in source
 
 
+@pytest.mark.mirror_incompatible(
+    reason="the owner's address it feeds the redactor is already redacted in the mirror"
+)
 def test_owner_email_is_quiet_not_forbidden(tmp_path):
     """copy_file must redact it silently, not report it as a FORBIDDEN finding."""
     mod = script()

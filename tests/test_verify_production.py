@@ -135,8 +135,15 @@ def test_the_preview_link_is_reported_blocked_rather_than_faked():
     green report and a dead funnel coexist."""
     status, evidence = check_preview("https://studioface.app", None)
     assert status == BLOCKED
-    assert "issue #4" in evidence
+    assert "human step: phone preview test" in evidence
     assert "interactive challenge" in evidence
+
+
+def test_the_blocked_line_does_not_point_at_a_closed_issue():
+    """Task 95h. It named issue #4 as the human step; #4 was closed on 22 September, so
+    every deploy log sent the reader to a finished ticket."""
+    _, evidence = check_preview("https://studioface.app", None)
+    assert "issue #4" not in evidence and "#4" not in evidence
 
 
 def test_a_failure_is_reported_with_the_link_that_broke():

@@ -4,7 +4,7 @@ export const metadata = { title: "Privacidad — StudioFace" };
 
 export default function Page() {
   return (
-    <LegalPage title="Política de privacidad">
+    <LegalPage title="Política de privacidad" updated="23 de septiembre de 2026">
       <p>
         Esta política explica qué datos tratamos, con qué finalidad y durante cuánto tiempo, de
         acuerdo con el Reglamento (UE) 2016/679 y la Ley Orgánica 3/2018.
@@ -31,10 +31,55 @@ export default function Page() {
       </p>
       <H2>Destinatarios</H2>
       <p>
-        Prestadores que hacen posible el servicio: Google Cloud (alojamiento, Unión Europea),
-        fal.ai (generación de imágenes), Stripe (pagos), Resend (correo) y Cloudflare (protección
-        frente a abuso). Algunos pueden tratar datos fuera del Espacio Económico Europeo con las
-        garantías previstas en el RGPD.
+        Prestadores que hacen posible el servicio. Google Cloud aloja el servicio y los datos en la
+        Unión Europea. Estos otros pueden tratar datos fuera del Espacio Económico Europeo:
+      </p>
+      <ul className="flex list-disc flex-col gap-3 pl-5">
+        <li>
+          Stripe (pagos): contrata con nosotros Stripe Payments Europe, Limited, y los datos del
+          pago llegan a Stripe, LLC en Estados Unidos al amparo del Marco de Privacidad de Datos
+          UE-EE. UU. Su acuerdo incorpora además cláusulas contractuales tipo.{" "}
+          <a className="sf-focus sf-consent-link underline" href="https://stripe.com/legal/dta">
+            Acuerdo de transferencia de datos de Stripe
+          </a>
+        </li>
+        <li>
+          Resend (correo): guarda los datos en Estados Unidos, con cláusulas contractuales tipo.{" "}
+          <a className="sf-focus sf-consent-link underline" href="https://resend.com/legal/dpa">
+            Acuerdo de tratamiento de datos de Resend
+          </a>
+        </li>
+        <li>
+          fal.ai (generación de imágenes): puede tratar las fotografías fuera del Espacio
+          Económico Europeo; fal no publica el país. Se aplican cláusulas contractuales tipo.{" "}
+          <a className="sf-focus sf-consent-link underline" href="https://fal.ai/legal/data-processing-addendum">
+            Acuerdo de tratamiento de datos de fal
+          </a>
+        </li>
+        <li>
+          Cloudflare (protección frente a abuso): puede tratar datos fuera del Espacio Económico
+          Europeo; Cloudflare no publica el país. Se aplican cláusulas contractuales tipo.{" "}
+          <a className="sf-focus sf-consent-link underline" href="https://www.cloudflare.com/cloudflare-customer-dpa/">
+            Acuerdo de tratamiento de datos de Cloudflare
+          </a>
+          . Para mejorar su detección de bots, Cloudflare trata además esas señales de la
+          comprobación de seguridad como responsable del tratamiento.{" "}
+          <a className="sf-focus sf-consent-link underline" href="https://www.cloudflare.com/turnstile-privacy-policy/">
+            Adenda de privacidad de Turnstile
+          </a>
+        </li>
+        <li>
+          Google Analytics 4 (medición) y Google Ads (publicidad): Google transfiere datos a
+          Estados Unidos al amparo del Marco de Privacidad de Datos UE-EE. UU.{" "}
+          <a className="sf-focus sf-consent-link underline" href="https://business.safety.google/adsdatatransfers/">
+            Transferencias de datos de Google
+          </a>
+        </li>
+      </ul>
+      <p>
+        Las cláusulas contractuales tipo son las de la Decisión de Ejecución (UE) 2021/914 de la
+        Comisión. El Marco de Privacidad de Datos UE-EE. UU. es el de la Decisión de Ejecución
+        (UE) 2023/1795 de la Comisión.
       </p>
       <H2>Tus derechos</H2>
       <p>

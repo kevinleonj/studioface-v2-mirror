@@ -89,6 +89,7 @@ def test_the_route_and_the_id_prefix_travel_with_the_line(captured):
     assert entry["order"] == "cs_test_a1wO"
 
 
+@pytest.mark.mirror_incompatible(reason="its cs_test_ fixture id is redacted by the mirror build")
 def test_an_id_is_truncated_to_twelve_characters():
     """The brief says the first twelve only. A Stripe session id is enough to look up a
     customer's order, so the log gets the handle and not the key."""

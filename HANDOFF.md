@@ -5749,3 +5749,73 @@ production (`.get()` and `.stream()` only). First real run, 23 September:
 session report.
 
 Gate green before each push; deploy `35820373286` green on all five jobs.
+
+## 2026-09-23 (Claude Code) — launch gate, task 93 (done), task 94 (stopped)
+
+**Launch gate: GO.** All read-only, full output in the session report.
+`verify_production.py https://studioface.app` (as `deploy.yml:155` calls it): 18 ok, one
+BLOCKED by design (free preview needs a human Turnstile solve), exit 0.
+`check_gallery_privacy.py`: GREEN. `check_gallery_privacy.py` is not called by
+`deploy.yml` at all, so it was run as the repo always runs it, with no arguments.
+`go_live.py --dry-run`: READY, 4 issues parked 'after launch'. `killswitch.py --status`:
+OFF. `check_ad_copy.py` and `check_ad_claims.py`: OK. `/foto-cv/`: 200, no redirect.
+Stripe live webhook endpoints: three, exactly one enabled (`...DV4oNARv`,
+`https://api.studioface.app/api/stripe/webhook`); the other two are already disabled.
+`funnel_report.py --since 2026-09-23`: day 1, zero previews, zero orders (no campaign yet).
+Stale text, not changed: `verify_production.py`'s BLOCKED line still points at issue #4,
+which is closed.
+
+**93, the privacy page names every transfer outside the EEA (issue #7 closed).** The
+"Destinatarios" section said only that some providers "may" process data outside the EEA
+"with the guarantees the GDPR provides". It now lists Stripe, Resend, fal.ai, Cloudflare,
+Google Analytics 4 and Google Ads with where the data goes, the mechanism in official
+Spanish wording, and a link to each vendor's document. Facts: `docs/verified.md` lines
+222-247, researcher agent, accessed 2026-09-23. Mechanism wording from the official
+Spanish titles of Decision (EU) 2021/914 ("cláusulas contractuales tipo") and 2023/1795
+("Marco de Privacidad de Datos UE-EE. UU."). `tests/test_privacy_transfers.py`: 4 red
+before, 7 green after; pins the sha256 of every byte outside the section; asserts the
+7-day and 1-year sentences word for word; forbids naming a country nobody verified.
+Links reuse `.sf-consent-link` (44px touch area), measured at 390x844 and 1440x900 with
+the consent banner showing: none covered. Suite 1042 passed; deploy `35834825352` green;
+live page checked with curl; #7 closed with that output. Commit `54cc145`.
+
+**No confirmado, for Kevin (none invented, all reported):**
+- fal's and Cloudflare's own pages name no country of processing, so the page says they
+  may process outside the EEA and do not publish the country.
+- The Data Privacy Framework list (dataprivacyframework.gov) needs JavaScript, so no
+  vendor's DPF status could be read there; only each vendor's own claim is recorded.
+- The Spanish text of GDPR articles 13(1)(f) and 46(2)(c) could not be read (EUR-Lex
+  returned empty pages twice). The page does not quote them.
+- Cloudflare's Turnstile Privacy Addendum makes Cloudflare a *controller* of Turnstile
+  signals used to improve its bot detection. The page does not say so; decide whether it
+  should.
+- Whether GA4 is linked to the Google Ads account cannot be checked from the repo.
+- The page's "Última actualización" still reads 17 September: that prop sits outside
+  "Destinatarios", which the brief froze byte for byte.
+
+**94, stopped on the brief's stop rule: the check was still red after two attempts.**
+Nothing merged, nothing pushed, the mirror not refreshed. Work is on local branch
+`task/94-mirror-suite`, commit `22dafa7`. Reproduced first: a fresh clone of the
+published mirror `6585dee` fails exactly 21 tests: 12 read `.github/`, 3 use `cs_test_`
+ids the mirror redacts, 4 feed the redactor the owner's address the mirror has already
+redacted, 1 needs the hook's executable bit (lost because the mirror is committed from
+Windows), and 1 needs `core.hooksPath`, which a fresh clone never sets. That last one is
+not one of the four causes the reviewer named. The branch marks those 21, pins them in
+`tests/mirror_incompatible.txt`, makes `make_public_mirror.py` drop `.github/` itself and
+write `MIRROR.txt` and `RUN-ME-FIRST.md`, and adds `scripts/check_mirror_suite.py`.
+- Attempt 1: 21 failed. The new `tests/conftest.py` was untracked, and the build copies
+  tracked files only.
+- Attempt 2: 2 failed, both in the new `tests/test_mirror_suite.py`, which cannot pass
+  inside a mirror. `test_a_repository_without_mirror_txt_is_not_a_mirror` asserts the
+  root has no MIRROR.txt, and `test_the_build_writes_mirror_txt_...` builds a mirror,
+  which needs the private repository's git index.
+- The private side is already right: 1057 passed, no skip mentions the mirror.
+
+**Fix, Kevin's call:** (a) keep the root assertion only in the private repository and skip
+the build test when `MIRROR.txt` exists, so the pin stays at 21; or (b) mark both
+`mirror_incompatible`, so the pin becomes 23.
+
+**Follow-ups:** fix the executable bit at the source (`git update-index --chmod=+x` for
+the files that are `100755` here) instead of skipping; add `git config core.hooksPath
+.githooks` to RUN-ME-FIRST so that test runs in the mirror instead of skipping; update
+the stale #4 reference in `verify_production.py`.

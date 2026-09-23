@@ -172,6 +172,7 @@ def smoke_paths() -> list[str]:
     return sorted(set(re.findall(r'f"\{base\}(/[^"]*)"', text)))
 
 
+@pytest.mark.mirror_incompatible(reason="reads .github/workflows, which the mirror does not carry")
 def test_the_deploy_verifies_from_outside_rather_than_curling_two_paths():
     """The rule this exists to hold: a deploy that leaves the funnel dead is a RED
     deploy. If the verifier is ever dropped from the workflow, nothing else notices."""

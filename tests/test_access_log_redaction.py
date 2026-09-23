@@ -88,6 +88,7 @@ def test_an_ordinary_query_parameter_that_starts_with_t_is_untouched(captured):
     assert "count=3" in message
 
 
+@pytest.mark.mirror_incompatible(reason="its cs_test_ fixture id is redacted by the mirror build")
 def test_the_old_path_token_route_is_redacted(captured):
     """Guard 2, refused case: /api/orders/{order}/{token}, the old path-token
     shape kept alive only for links already sent, must not print the token."""
@@ -103,6 +104,7 @@ def test_an_unrelated_path_that_merely_contains_orders_is_untouched(captured):
     assert '"GET /api/orders-export/report.csv HTTP/1.1" 200' in message
 
 
+@pytest.mark.mirror_incompatible(reason="its cs_test_ fixture id is redacted by the mirror build")
 def test_the_header_route_order_id_alone_is_shortened_not_erased(captured):
     """The new shape (app/main.py's status_by_header) carries no token in the
     path at all, only the order id - which app/logs.py already shortens

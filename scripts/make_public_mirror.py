@@ -16,7 +16,16 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DROP_PATTERNS = (".env", ".tfstate", ".tfvars", "bootstrap.config.json", ".pem", ".p12", ".key")
-DROP_DIRECTORIES = (".claude/state/", "work/", "frontend/out/", "docs/ui/2026-09-19/current/")
+# .github/ is dropped here rather than deleted by hand after the build (task 94): pushing
+# workflow files needs a token scope the mirror does not have, and a check that rebuilds
+# the mirror must build exactly what gets published.
+DROP_DIRECTORIES = (
+    ".claude/state/",
+    "work/",
+    "frontend/out/",
+    "docs/ui/2026-09-19/current/",
+    ".github/",
+)
 BINARY_SUFFIXES = {
     ".png",
     ".jpg",
@@ -97,6 +106,52 @@ def copy_file(name: str, target: Path) -> list[str]:
     return findings
 
 
+RUN_ME_FIRST = r"""# Run me first
+
+This is a public, history-free mirror of a private repository. MIRROR.txt names the
+source commit it was built from.
+
+    python -m venv .venv
+    .venv\Scripts\activate          (Windows)
+    source .venv/bin/activate         (macOS, Linux)
+    pip install -e ".[dev]"
+    pytest -q
+
+Expected: "0 failed".
+
+The tests listed in tests/mirror_incompatible.txt are skipped here, each with its reason.
+They cannot pass in this copy because of how it is built: they read .github/, which the
+mirror does not carry; they use values the mirror redacts (Stripe test session ids, the
+owner's address); or they need git settings a fresh clone does not have. They run in the
+private repository on every push.
+"""
+
+
+def source_commit() -> str:
+    """The commit the files came from, marked -dirty when tracked files differ from it:
+    the build copies the working tree, so a clean hash on a dirty tree would lie."""
+    head = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True
+    ).stdout.strip()
+    dirty = subprocess.run(
+        ["git", "status", "--porcelain", "--untracked-files=no"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.strip()
+    return f"{head}-dirty" if dirty else head
+
+
+def write_notes(target: Path, commit: str) -> None:
+    """MIRROR.txt is also what tests/conftest.py looks for: its presence is the one signal
+    that turns the mirror_incompatible skips on, and only this script writes it."""
+    (target / "MIRROR.txt").write_text(
+        f"Public mirror of a private repository.\nsource commit: {commit}\n", encoding="utf-8"
+    )
+    (target / "RUN-ME-FIRST.md").write_text(RUN_ME_FIRST, encoding="utf-8")
+
+
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
         print("usage: make_public_mirror.py <empty target directory>")
@@ -107,7 +162,8 @@ def main(argv: list[str]) -> int:
         return 2
     names = [name for name in tracked_files() if not is_dropped(name)]
     findings = [finding for name in names for finding in copy_file(name, target)]
-    print(f"copied {len(names)} files to {target}")
+    write_notes(target, source_commit())
+    print(f"copied {len(names)} files to {target}, plus MIRROR.txt and RUN-ME-FIRST.md")
     for finding in findings:
         print("REDACTED, ROTATE THE ORIGINAL IF REAL:", finding)
     print("SAFE, WITH REDACTIONS" if findings else "CLEAN")

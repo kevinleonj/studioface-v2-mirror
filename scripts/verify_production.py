@@ -670,7 +670,7 @@ def check_preview(base: str, token: str | None) -> tuple[str, str]:
         return (
             BLOCKED,
             "needs a Turnstile token; production presents an interactive challenge "
-            "by design. Human step: issue #4.",
+            "by design. human step: phone preview test.",
         )
     files = {"files": ("selfie.jpg", b"\xff\xd8\xff\xdb" + b"\x00" * 64, "image/jpeg")}
     r = httpx.post(

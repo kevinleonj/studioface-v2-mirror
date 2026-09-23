@@ -87,6 +87,7 @@ def test_the_api_base_is_gone_from_the_frontend_entirely():
     assert "API_URL" not in text, "the API base is still a configurable value"
 
 
+@pytest.mark.mirror_incompatible(reason="reads .github/workflows, which the mirror does not carry")
 def test_ci_no_longer_writes_an_api_base_into_the_build():
     """The value lived in a GitHub variable, so removing it from the code is half the
     job: the build must stop consuming it, or the next person re-adds the read.

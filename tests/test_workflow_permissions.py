@@ -64,6 +64,7 @@ def test_every_workflow_declares_its_permissions_explicitly():
     assert not missing, f"workflows with no explicit permissions: {missing}"
 
 
+@pytest.mark.mirror_incompatible(reason="reads .github/workflows, which the mirror does not carry")
 def test_self_heal_holds_no_scope_it_does_not_use():
     """The one that found something. Each granted scope must have a use in the file."""
     unused = []
@@ -75,6 +76,7 @@ def test_self_heal_holds_no_scope_it_does_not_use():
     assert not unused, f"self-heal holds scopes nothing in it uses: {unused}"
 
 
+@pytest.mark.mirror_incompatible(reason="reads .github/workflows, which the mirror does not carry")
 def test_self_heal_can_still_do_the_three_things_it_exists_to_do():
     """Held-out check against over-trimming. Narrowing that breaks the healer is worse
     than the scopes it removed, because the healer is what catches my mistakes."""
