@@ -257,3 +257,23 @@ def test_the_twin_a_real_claim_missing_from_its_own_real_page_is_refused(tmp_pat
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+# ------------------------------------------------ task 95j: a second ad in an ad group
+
+
+def test_an_additional_ads_claim_missing_from_the_page_is_refused(tmp_path):
+    export_dir = _stage_export(tmp_path, "foto-cv")
+    extra = {"name": "cv-b", "headlines": ["Tu foto en 3 horas"], "descriptions": []}
+    violations = find_claim_violations({"ad_groups": [_group(additional_ads=[extra])]}, export_dir)
+    assert any(v.startswith("cv/cv-b: claim '3 horas'") for v in violations), violations
+
+
+def test_an_additional_ads_claims_that_are_on_the_page_pass(tmp_path):
+    export_dir = _stage_export(tmp_path, "foto-cv")
+    extra = {
+        "name": "cv-b",
+        "headlines": ["Foto de currículum: 19,99 €"],
+        "descriptions": ["Sube de 1 a 4 selfies. Tus selfies se borran a los 7 días."],
+    }
+    assert find_claim_violations({"ad_groups": [_group(additional_ads=[extra])]}, export_dir) == []

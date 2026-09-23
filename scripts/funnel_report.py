@@ -60,8 +60,14 @@ import sys
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 
 from app.core import Pipeline
+
+# Run as `python scripts/funnel_report.py`, `scripts` is not a package; its own folder
+# goes on the path instead, the way go_live.py reaches _exec.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from found_us_report import format_found_us, found_us_counts  # noqa: E402
 
 PROJECT = "studio-face-fresh-start"
 DAY_SECONDS = 86400
@@ -277,6 +283,7 @@ def main(argv: list[str]) -> int:
     db = firestore.Client(project=PROJECT)
     rows = build_report(db, start_day, end_day)
     print(format_report(rows, stored_batches_total(db)))
+    print(format_found_us(found_us_counts(db, start_day, end_day)))
     if args.since:
         print()
         print(step1_line(db, start_day, end_day))

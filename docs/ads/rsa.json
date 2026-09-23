@@ -6,7 +6,7 @@
     "location": "Spain",
     "language": "Spanish",
     "total_cap_eur": 50,
-    "bidding": "OPEN: Kevin decides"
+    "bidding": "Maximize clicks, max CPC bid limit 1,20 EUR"
   },
   "ad_groups": [
     {
@@ -41,6 +41,37 @@
         "Cuatro fotos profesionales para tu currículum por 19,99 €, IVA incluido. Pago único.",
         "Cambiamos la luz, el fondo y la ropa, no tu cara. Compruébalo gratis antes de pagar.",
         "Tus fotos se borran a los 7 días. Si no generamos las cuatro, devolución automática."
+      ],
+      "additional_ads": [
+        {
+          "name": "cv-b",
+          "path": [
+            "foto-cv",
+            "gratis"
+          ],
+          "headlines": [
+            "Foto para tu CV con IA",
+            "Prueba gratis, sin registro",
+            "Tu foto de currículum lista",
+            "Foto de CV en dos minutos",
+            "Sin fotógrafo ni estudio",
+            "Paga solo si te gusta",
+            "4 fotos para CV por 19,99 €",
+            "Hecha con tus propios selfies",
+            "Pago único, IVA incluido",
+            "Mira el resultado antes",
+            "Foto profesional para el CV",
+            "StudioFace: fotos con IA",
+            "Foto CV profesional con IA",
+            "Foto para currículum con IA",
+            "Foto de currículum: 19,99 €"
+          ],
+          "descriptions": [
+            "Sube de 1 a 4 selfies y recibe cuatro retratos listos para tu currículum.",
+            "Luz, fondo y ropa de estudio. Tu cara no cambia.",
+            "Tus selfies se borran a los 7 días. Sin registro y pago único."
+          ]
+        }
       ]
     },
     {
@@ -119,6 +150,7 @@
     "portada",
     "cv con foto",
     "pinterest",
-    "meme"
+    "meme",
+    "gratis"
   ]
 }

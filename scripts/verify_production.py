@@ -266,6 +266,23 @@ def check_the_bundle_can_reset_turnstile(base: str) -> tuple[str, str]:
 DOC_PATHS = ("/docs", "/redoc", "/openapi.json")
 
 
+# Task 95b. Public by design: IndexNow proves ownership by fetching this file.
+INDEXNOW_CONFIG = Path(__file__).resolve().parent.parent / "frontend/src/content/indexnow.json"
+
+
+def check_indexnow_key_file(base: str) -> tuple[str, str]:
+    """IndexNow answers 202 even when the key file is missing, then drops the URLs
+    silently (scripts/indexnow_submit.py). So the file itself is checked from outside:
+    200, and the body is exactly the key."""
+    key = json.loads(INDEXNOW_CONFIG.read_text(encoding="utf-8"))["key"]
+    r = httpx.get(f"{base}/{key}.txt", timeout=TIMEOUT_S)
+    if r.status_code != 200:
+        return FAIL, f"/{key}.txt answered {r.status_code}"
+    if r.text.strip() != key:
+        return FAIL, f"/{key}.txt is served but its body is not the key"
+    return OK, f"/{key}.txt 200, body is the key"
+
+
 def check_the_schema_is_not_published(base: str) -> tuple[str, str]:
     """F8/O9. /docs, /redoc and /openapi.json listed every route, parameter and response
     shape of the money path, including /internal/generate and /internal/budget."""
@@ -699,6 +716,7 @@ HTTP_CHECKS = (
     ("schema is not published", check_the_schema_is_not_published),
     ("gallery offers a download", check_the_gallery_can_offer_a_download),
     ("cors preflight", check_preflight_is_not_needed),
+    ("indexnow key file", check_indexnow_key_file),
 )
 
 

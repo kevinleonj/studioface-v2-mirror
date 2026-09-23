@@ -26,7 +26,7 @@ INK = "#141312"
 DIM = "#5C5851"
 ACCENT = "#C3352B"
 
-TRADER = "limeralda, NIF Z3714124-C, Maria de Molina 31, Madrid"
+TRADER = "Kevin Daniel León Jouvin, NIF Z3714124-C, Calle de Diego de León 13, 7º A, 28006 Madrid"
 SUPPORT = "hola@studioface.app"
 SITE = "https://studioface.app"
 

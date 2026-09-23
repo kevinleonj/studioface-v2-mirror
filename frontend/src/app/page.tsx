@@ -106,6 +106,8 @@ const ORGANIZATION_LD = {
   "@type": "Organization",
   name: "StudioFace",
   url: SITE_URL,
+  // Task 95d. The 180x180 apple-icon.png the app already serves.
+  logo: "https://studioface.app/apple-icon.png",
 };
 
 export default function Home() {
@@ -229,6 +231,15 @@ export default function Home() {
         <h2 className="font-[family-name:var(--font-newsreader)] text-2xl">Más muestras</h2>
         <MoreMuestras />
       </section>
+
+      {/* Task 95d. Who is behind the page you are about to pay: one line, last, so it never
+          competes with the proof or the upload above it. */}
+      <p className="sf-wrap mt-[var(--s5)] text-sm text-[color:var(--muted-foreground)]">
+        StudioFace lo hace Kevin, desde Madrid.{" "}
+        <a className="sf-focus sf-consent-link underline" href="/sobre-nosotros/">
+          Sobre nosotros
+        </a>
+      </p>
 
       {/* Placed last, not first: this is invisible structured data, and putting it
           before the hero moved its serialised price into the raw HTML ahead of the

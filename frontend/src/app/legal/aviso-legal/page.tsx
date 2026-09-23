@@ -4,14 +4,15 @@ export const metadata = { title: "Aviso legal — StudioFace" };
 
 export default function Page() {
   return (
-    <LegalPage title="Aviso legal">
+    <LegalPage title="Aviso legal" updated="23 de septiembre de 2026">
       <p>
         En cumplimiento de la Ley 34/2002, de servicios de la sociedad de la información y de
         comercio electrónico, se facilitan los siguientes datos identificativos.
       </p>
       <H2>Titular</H2>
       <p>
-        Titular: limeralda. NIF: Z3714124-C. Domicilio: Maria de Molina 31, Madrid. Correo de contacto: hola@studioface.app.
+        Titular: Kevin Daniel León Jouvin. NIF: Z3714124-C. Domicilio: Calle de Diego de León
+        13, 7º A, 28006 Madrid. Correo de contacto: hola@studioface.app.
       </p>
       <H2>Objeto</H2>
       <p>

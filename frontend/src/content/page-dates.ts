@@ -11,11 +11,12 @@
  * every built <lastmod> equals the date written here.
  */
 export const PAGE_DATES = {
-  "/": "2026-09-22",
+  "/": "2026-09-23",
   "/foto-cv/": "2026-09-21",
   "/foto-linkedin/": "2026-09-21",
-  "/legal/aviso-legal/": "2026-09-18",
+  "/legal/aviso-legal/": "2026-09-23",
   "/legal/privacidad/": "2026-09-23",
-  "/legal/terminos/": "2026-09-22",
+  "/legal/terminos/": "2026-09-23",
   "/legal/cookies/": "2026-09-17",
+  "/sobre-nosotros/": "2026-09-23",
 } as const satisfies Record<string, string>;

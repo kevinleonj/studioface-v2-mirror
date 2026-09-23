@@ -307,6 +307,13 @@ class FirestoreOrderStore(OrderStore):
         )
         return [self._to_order(snap.to_dict() or {}) for snap in query.stream()]
 
+    def set_found_us(self, order_id: str, answer: str) -> None:
+        """Task 95e. A single-field update, never a whole-document put, so the answer
+        cannot overwrite a concurrent write to the order. The route calls this only after
+        reading the order as delivered; what Firestore's update() does on a missing
+        document is not stated on Google's own page (docs/verified.md, task 95e)."""
+        self.db.collection("orders").document(order_id).update({"found_us": answer})
+
     def get(self, order_id: str) -> Order | None:
         snap = self.db.collection("orders").document(order_id).get()
         if not snap.exists:

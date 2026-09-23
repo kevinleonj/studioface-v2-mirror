@@ -80,10 +80,10 @@ def test_the_marked_set_is_exactly_the_pinned_set():
     assert differences(set(marked()), pinned()) == []
 
 
-def test_the_pin_holds_21_plus_this_files_2_plus_task_95g_4():
-    """The reviewer's 21; this file's own 2 (option b); and the 4 deploy.yml tests task
-    95g added after the reviewer's run, for the reviewer's most common reason."""
-    assert len(pinned()) == 27
+def test_the_pin_holds_21_plus_this_files_2_plus_the_deploy_yml_readers():
+    """The reviewer's 21; this file's own 2 (option b); and the tests added since that
+    read deploy.yml, the reviewer's most common reason: 4 from task 95g, 2 from 95b."""
+    assert len(pinned()) == 29
 
 
 def test_every_marker_states_its_reason():

@@ -32,10 +32,19 @@ def find_group_violations(name: str, group: dict) -> list[str]:
     return violations
 
 
+def _ads(group: dict) -> list[tuple[str, dict]]:
+    """The group's own ad, then each of its `additional_ads` (task 95j), with the name a
+    violation should carry: "cv" for the first, "cv/cv-b" for the others."""
+    name = group.get("name", "?")
+    extra = [(f"{name}/{ad.get('name', '?')}", ad) for ad in group.get("additional_ads", [])]
+    return [(name, group), *extra]
+
+
 def find_violations(data: dict) -> list[str]:
     violations: list[str] = []
     for group in data.get("ad_groups", []):
-        violations.extend(find_group_violations(group.get("name", "?"), group))
+        for name, ad in _ads(group):
+            violations.extend(find_group_violations(name, ad))
     return violations
 
 

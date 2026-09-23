@@ -48,3 +48,16 @@ c54b2b6dd79f7e4366ebf790c3ba85b6455ecbc5:docs/audit/go-live-dry-run-2026-09-20.t
 # paragraph to describe the constant instead of quoting it; this entry only covers
 # the earlier snapshot, which still exists in history.
 3e218c07b977b536748fbb40dc5649982f2bb55b:HANDOFF.md:generic-api-key:3743
+
+# 9e64df1 (task 95b) — the IndexNow key in frontend/src/content/indexnow.json. Public by
+# design: IndexNow proves site ownership by fetching this exact value from
+# https://studioface.app/<key>.txt, where it is served to anyone, and scripts/
+# verify_production.py checks it is. 32 hex characters, which is why generic-api-key
+# fires. A secret would be worthless the moment it is served; this one only works because
+# it is.
+9e64df13a9cf10cb757fb0ce5ffeb118f5d17905:frontend/src/content/indexnow.json:generic-api-key:2
+
+# 9e64df1 (task 95b) — GOOD_KEY in tests/test_indexnow.py, "0123456789abcdef" twice: a
+# made-up key in the valid shape for the stubbed tests. It is not and never was anyone's
+# key; no network call in that file is real.
+9e64df13a9cf10cb757fb0ce5ffeb118f5d17905:tests/test_indexnow.py:generic-api-key:38

@@ -204,6 +204,9 @@ class Order:
     # spend as an analytics key too. None for a no_payment_required (100%-off) order,
     # which never gets a PaymentIntent from Stripe.
     payment_intent: str | None = None
+    # Task 95e. The customer's answer to "¿Cómo nos encontraste?", asked on the gallery
+    # page only after delivery (app/found_us.py). One of app.found_us.FOUND_US, or None.
+    found_us: str | None = None
 
 
 class OrderStore:
@@ -242,6 +245,10 @@ class OrderStore:
 
     def get(self, order_id: str) -> Order | None:
         return self._orders.get(order_id)
+
+    def set_found_us(self, order_id: str, answer: str) -> None:
+        """Task 95e. One field only; the route has already checked the order exists."""
+        self._orders[order_id].found_us = answer
 
     def record_refund(self, order_id: str, reason: str, day: str) -> list[tuple[str, str]]:
         """Append one refunded order to today's tally and hand back the day's first

@@ -83,7 +83,7 @@ def test_refund_does_not_pretend_the_money_is_already_back():
 def test_every_email_identifies_the_trader(make):
     """LSSI-CE Art. 10. The same identity as /legal, not a different one."""
     both = both_parts(make())
-    assert "limeralda" in both
+    assert "Kevin Daniel León Jouvin" in both
     assert "Z3714124-C" in both
 
 

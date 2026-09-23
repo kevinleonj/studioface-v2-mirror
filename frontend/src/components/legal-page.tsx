@@ -1,8 +1,9 @@
 /**
  * Shared shell for the four legal pages.
  *
- * The trader's identity is now filled in (limeralda, NIF Z3714124-C, Maria de Molina
- * 31, Madrid). The Pending component that used to paint a visible [PENDIENTE] mark is
+ * The trader's identity is filled in as registered with the Agencia Tributaria (Modelo 036,
+ * 13-09-2026; task 96a): Kevin Daniel León Jouvin, NIF Z3714124-C, Calle de Diego de León
+ * 13, 7º A, 28006 Madrid. The Pending component that used to paint a visible [PENDIENTE] mark is
  * deleted rather than left unused: an unused placeholder is an invitation to ship
  * another one. tests/test_legal_identity.py fails if any page renders one again.
  */

@@ -21,6 +21,8 @@ const ORGANIZATION_RETURN_POLICY_LD = {
   "@type": "Organization",
   name: "StudioFace",
   url: SITE_URL,
+  // Task 95d. The 180x180 apple-icon.png the app already serves.
+  logo: "https://studioface.app/apple-icon.png",
   hasMerchantReturnPolicy: {
     "@type": "MerchantReturnPolicy",
     "@id": RETURN_POLICY_ID,
@@ -32,7 +34,7 @@ const ORGANIZATION_RETURN_POLICY_LD = {
 
 export default function Page() {
   return (
-    <LegalPage title="Términos y condiciones">
+    <LegalPage title="Términos y condiciones" updated="23 de septiembre de 2026">
       <H2>Qué incluye el servicio</H2>
       <p>
         Por 19,99 €, IVA incluido, recibes cuatro imágenes de perfil generadas con inteligencia
@@ -63,7 +65,11 @@ export default function Page() {
       </p>
       <H2>Contacto</H2>
       <p>
-        limeralda, NIF Z3714124-C, Maria de Molina 31, Madrid. hola@studioface.app.
+        Titular: Kevin Daniel León Jouvin. NIF: Z3714124-C. Domicilio: Calle de Diego de León
+        13, 7º A, 28006 Madrid. hola@studioface.app.{" "}
+        <a className="sf-focus sf-consent-link underline" href="/sobre-nosotros/">
+          Sobre nosotros
+        </a>
       </p>
       <script
         type="application/ld+json"

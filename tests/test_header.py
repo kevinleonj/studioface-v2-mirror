@@ -96,7 +96,9 @@ def test_the_trader_is_identified_on_every_page_not_only_in_legal():
     zero times on the landing page before this."""
     for page in pages():
         html = page.read_text(encoding="utf-8", errors="ignore")
-        assert "limeralda" in html, f"{page.relative_to(EXPORT)} does not name the trader"
+        assert "Kevin Daniel León Jouvin" in html, (
+            f"{page.relative_to(EXPORT)} does not name the trader"
+        )
         assert "Z3714124-C" in html, f"{page.relative_to(EXPORT)} has no NIF"
 
 

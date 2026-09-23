@@ -42,3 +42,7 @@ work/run.log
 # Newsreader font cached by scripts/make_favicon.py on first run (docs/verified.md N2);
 # fetched from Google's font repo, not a repo asset.
 .fonts-cache/
+
+# Task 95b. frontend/scripts/write-indexnow-key.mjs writes the IndexNow key file here on
+# every build, from frontend/src/content/indexnow.json. No hand-written .txt belongs in public/.
+/frontend/public/*.txt

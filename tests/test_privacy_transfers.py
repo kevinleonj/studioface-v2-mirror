@@ -48,10 +48,12 @@ TRANSFERS = {
 }
 
 # sha256 of every byte of page.tsx OUTSIDE the "Destinatarios" section. Pinned at 20fcb7e
-# (task 93); re-pinned in task 95f for ONE change, the `updated` date on <LegalPage>,
-# proven by recomputing the old file with only that line swapped (same hash). If you edit
+# (task 93); re-pinned in task 95f for ONE change, the `updated` date on <LegalPage>, and
+# in task 96a for ONE change, the "Responsable" line (the trader as registered), and in
+# task 96b for ONE addition, the found-us paragraph in "Qué datos tratamos". Each proven
+# by recomputing the old file with only that change applied (same hash). If you edit
 # another section on purpose, re-read it as legal text, then update this value.
-OUTSIDE_DESTINATARIOS_SHA256 = "fffea1c4653e6c80de236d11b977e9231e53105a37e3c439283d0c0f1a9c42fc"
+OUTSIDE_DESTINATARIOS_SHA256 = "7960a0b36de132e19670a70b9785c0124b76a8b65112fa4b448ff9aea33058f8"
 
 
 def _raw() -> str:

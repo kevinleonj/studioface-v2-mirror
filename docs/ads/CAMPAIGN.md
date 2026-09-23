@@ -6,9 +6,10 @@ number or duration an ad promises must appear on the landing page it points to).
 and no ad group is created in the Google Ads account by this document or by those scripts —
 they only write and check files.
 
-The "Building the CV campaign in Google Ads" section below is the field-by-field sheet Kevin
-builds the campaign from by hand. It names every field the way Google Ads names it on screen.
-Nothing in this document touches Google Ads; the campaign is built by a human reading this file.
+The "Live account state" section below records the campaign as it exists in the Google Ads
+account, built on 23 September 2026 through the Google Ads API. Nothing in this repository
+creates, edits or enables anything in Google Ads; this document and those scripts only write
+and check files. When the account changes, this section changes in the same commit.
 
 ## Settled
 
@@ -30,140 +31,55 @@ Nothing in this document touches Google Ads; the campaign is built by a human re
 - **The `cv` group goes first.** It stays the only group serving until it has either hit
   its own share of the first step's spend or been paused; `linkedin` starts only after `cv`
   has produced a signal (a preview started or a sale, per the pre-registered kill rule
-  below) or Kevin says otherwise. The campaign built below is the `cv` group only —
+  below) or Kevin says otherwise. The live campaign below is the `cv` group only —
   `linkedin` is not part of it.
 
-## Building the CV campaign in Google Ads
+## Live account state (built 23 September 2026)
 
-> **Pause it the moment it is saved.** Google Ads starts serving ads as soon as a campaign
-> is created and left enabled, and there is no way to create it already paused. The very
-> first thing to do after clicking Save is: go to **Campaigns**, tick the checkbox next to
-> the new campaign's name, click **Edit**, click **Pause**. Do this before doing anything
-> else, before checking the ad preview, before going to make coffee. This instruction is
-> repeated at the end of the checklist below — do not skip either copy of it.
+Built through the Google Ads API (Windsor) on 23 September 2026, not by hand. `rsa.json` is
+the source of truth for every keyword, headline and description; this section records the
+settings that only exist in the account.
 
-Everything in this section comes from `docs/ads/rsa.json`'s `cv` ad group, copied character
-for character, plus the decisions below that are Kevin's own (bidding and daily budget).
-
-### Campaign settings
-
-| Field, as Google Ads names it | Value |
+| Setting | Live value |
 |---|---|
-| Campaign name | `StudioFace CV 2026-09` |
-| Campaign type | Search |
-| Results you want / goal | No goal's guidance — build it without a campaign objective |
-| Networks | Search Network only. Leave **Include Google Search Partners** unticked. Do not include the Display Network. |
-| Locations | Spain |
-| Languages | Spanish |
-| Bidding | **Maximize clicks.** Tick **Set a maximum cost per click bid limit** and enter **1,20 EUR**. (Kevin's decision.) |
-| Budget | Daily budget: **5 EUR** |
-| Ad group name | `cv` (only ad group in this campaign) |
+| Campaign | Search campaign `StudioFace CV 2026-09`, id `24285475822` |
+| Created | via the Google Ads API (Windsor), 23 September 2026 |
+| Status | **PAUSED** until Kevin enables it; it serves nothing before that |
+| Bidding | Maximize clicks, maximum cost-per-click bid limit 1,20 EUR |
+| Budget | 5 EUR per day |
+| Dates | 23 September to 2 October 2026 |
+| Locations | Spain, presence only |
+| Language | Spanish |
+| Networks | Google Search only (no Search Partners, no Display) |
+| AI Max | off |
+| Broad match | off |
+| Automatically created assets | off |
+| Auto-tagging | on |
+| Auto-apply recommendations | off |
 
-### Keywords (ad group `cv`, exact match)
+**Ad group `cv`**, final URL `https://studioface.app/foto-cv/`, the 4 exact-match keywords
+in `rsa.json`'s `keywords_exact`. Its ad is the `cv` group's own headlines and descriptions
+in `rsa.json`. A second ad, `cv-b`, is in `rsa.json` under `additional_ads` (task 95j) and
+is created in the account after that change merged.
 
-Add each one exactly as written, including the square brackets — the brackets are what
-tells Google Ads this is exact match:
+**Negative keywords**, campaign level, phrase match: 41, exactly `rsa.json`'s
+`negative_keywords_phrase` (the original 40 plus `gratis`).
 
-```
-[foto curriculum]
-[foto cv]
-[foto para curriculum]
-[foto de curriculum]
-```
+**Sitelinks**
 
-### Negative keywords (campaign level, phrase match)
-
-Add on the campaign's **Negative keywords** page, not inside the ad group. Set the match
-type to **Phrase match** for every line (or wrap each one in quotation marks when typing
-it in, which sets phrase match directly). All 40, copied from `rsa.json`'s
-`negative_keywords_phrase`, unchanged:
-
-```
-gratis online
-free
-generador de imagenes
-crear imagenes
-dibujo
-anime
-avatar
-logo
-fondo de pantalla
-midjourney
-chatgpt
-gemini
-canva
-photoshop
-prompt
-app
-apk
-descargar
-fotografo
-estudio fotografico
-boda
-carnet
-dni
-pasaporte
-quitar fondo
-mejorar calidad
-restaurar foto
-video
-plantilla
-word
-pdf
-ejemplo
-sin foto
-tamaño
-medidas
-fondo
-portada
-cv con foto
-pinterest
-meme
-```
-
-### The ad (responsive search ad, ad group `cv`)
-
-**Final URL:** `https://studioface.app/foto-cv/`
-
-**Path fields** (the two boxes under the final URL that build the display path):
-- Path 1: `foto-cv`
-- Path 2: `gratis`
-
-**Headlines** — Google Ads gives 15 headline boxes; only the first 12 are filled, the rest
-stay empty. Copied character for character from `rsa.json`, each one already checked
-against Google's 30-character headline limit by `scripts/check_ad_copy.py`:
-
-| Headline | Characters |
+| Sitelink | Final URL |
 |---|---|
-| Foto para tu CV con IA | 22/30 |
-| Prueba gratis, sin registro | 27/30 |
-| Tu foto de currículum lista | 27/30 |
-| Foto de CV en dos minutos | 25/30 |
-| Sin fotógrafo ni estudio | 24/30 |
-| Paga solo si te gusta | 21/30 |
-| 4 fotos para CV por 19,99 € | 27/30 |
-| Hecha con tus propios selfies | 29/30 |
-| Pago único, IVA incluido | 24/30 |
-| Mira el resultado antes | 23/30 |
-| Foto profesional para el CV | 27/30 |
-| StudioFace: fotos con IA | 24/30 |
+| Foto para LinkedIn | https://studioface.app/foto-linkedin/ |
+| Cómo funciona | https://studioface.app/ |
+| Condiciones de compra | https://studioface.app/legal/terminos/ |
+| Borrado en 7 días | https://studioface.app/legal/privacidad/ |
 
-**Descriptions** — Google Ads gives 4 description boxes; all 4 are filled. Copied
-character for character from `rsa.json`, each already checked against Google's
-90-character description limit:
+**Callouts**, exactly as live: `Prueba gratis`, `Sin registro`, `Pago único, IVA incluido`,
+`Listo en dos minutos`.
 
-| Description | Characters |
-|---|---|
-| Sube de 1 a 4 selfies y mira una prueba gratis. Sin registro y sin tarjeta para probar. | 87/90 |
-| Cuatro fotos profesionales para tu currículum por 19,99 €, IVA incluido. Pago único. | 84/90 |
-| Cambiamos la luz, el fondo y la ropa, no tu cara. Compruébalo gratis antes de pagar. | 84/90 |
-| Tus fotos se borran a los 7 días. Si no generamos las cuatro, devolución automática. | 84/90 |
-
-### Conversion goal
-
-In the campaign's **Goals** settings, set the campaign to use a campaign-specific
-conversion goal, and select **StudioFace (web) purchase** as the only primary conversion
-action for this campaign. Nothing else should be ticked as primary.
+**Not recorded here:** the campaign's conversion goal. The old build sheet specified
+**StudioFace (web) purchase** as the only primary conversion action; the live state above
+does not include it, so check it in the account rather than trusting this file.
 
 ### Daily budget versus the first step — read this before setting either
 
@@ -174,27 +90,6 @@ less on a quiet one, so one day's spend column can show more than 5 EUR — that
 pacing, not an error. **What governs is the 50 EUR step cap, not the number of days.**
 Check total spend against 50 EUR (via the Google Ads spend column, or
 `scripts/funnel_report.py`), not the calendar — do not wait for day ten to look.
-
-### Checklist — tick each one while building the campaign by hand
-
-- [ ] Campaign type set to Search, no goal-guided flow
-- [ ] Campaign name set to `StudioFace CV 2026-09`
-- [ ] Networks: Search Network only, Search Partners unticked, Display not included
-- [ ] Location set to Spain
-- [ ] Language set to Spanish
-- [ ] Bidding set to Maximize clicks, with a maximum cost-per-click bid of 1,20 EUR
-- [ ] Daily budget set to 5 EUR
-- [ ] Conversion goal set to **StudioFace (web) purchase** as the sole primary conversion
-- [ ] Ad group `cv` created (only ad group — `linkedin` is not built yet)
-- [ ] All four exact-match keywords added, each inside square brackets
-- [ ] All 40 negative keywords added at campaign level, all set to phrase match
-- [ ] Final URL set to `https://studioface.app/foto-cv/`
-- [ ] Path 1 set to `foto-cv`, Path 2 set to `gratis`
-- [ ] All 12 headlines entered, character for character from the table above
-- [ ] All 4 descriptions entered, character for character from the table above
-- [ ] Campaign saved
-- [ ] **Immediately after saving: Campaigns, tick the campaign's checkbox, Edit, Pause —
-      done before anything else**
 
 ## Pre-registered test
 
@@ -226,18 +121,9 @@ both were still live.
 
 ## Open — Kevin decides
 
-- **Bidding strategy and daily budget are now decided** (this task, 2026-09-22): Maximize
-  clicks with a 1,20 EUR maximum cost-per-click bid, 5 EUR daily budget — see "Building the
-  CV campaign in Google Ads" above for the exact fields. They are no longer open.
-- **The retention disclosure gap.** `scripts/check_ad_claims.py docs/ads/rsa.json
-  frontend/out` reports, for both groups: `claim '7 días' not found on
-  frontend\out\<slug>\index.html`. Both ad groups' descriptions say "Tus fotos se borran a
-  los 7 días" (true — it is stated on the home page FAQ, in the delivery email, and in
-  `/legal/privacidad/`), but the ad-landing pages built in task 23 show only 3 of the
-  5 shared FAQ questions (`frontend/src/content/ad-pages.ts`, `SHARED_FAQ`), and the
-  retention question is not one of the three. This task did not touch that file — it
-  was not asked to, and it is live, real-payments copy. Kevin decides: add the retention
-  question back to the two ad-landing pages, or drop the "7 días" line from the ad
-  descriptions. `tests/test_check_ad_claims.py::test_the_real_ad_groups_claims_do_land_
-  on_their_pages` is marked `xfail(strict=False)` for exactly this reason, so it stays
-  visible in every pytest run without blocking `scripts/ci.py`.
+- **Bidding strategy and daily budget are decided and live** (Maximize clicks, 1,20 EUR
+  maximum cost-per-click bid, 5 EUR a day): see "Live account state" above.
+- **The retention disclosure gap is closed.** Task 33 put "¿Qué pasa con mis fotos?" on
+  both ad landing pages, so "7 días" in the ads is stated on the page they point to;
+  `scripts/check_ad_claims.py` passes and its test is no longer marked xfail.
+- **Enabling the campaign** is Kevin's action in the account. Nothing here does it.

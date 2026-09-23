@@ -75,6 +75,14 @@ def page_path_for(export_dir: Path, final_url: str) -> Path:
     return export_dir / slug / "index.html"
 
 
+def _ads(group: dict) -> list[tuple[str, dict]]:
+    """The group's own ad, then each of its `additional_ads` (task 95j), with the name a
+    violation should carry: "cv" for the first, "cv/cv-b" for the others."""
+    name = group.get("name", "?")
+    extra = [(f"{name}/{ad.get('name', '?')}", ad) for ad in group.get("additional_ads", [])]
+    return [(name, group), *extra]
+
+
 def find_claim_violations(data: dict, export_dir: Path) -> list[str]:
     violations: list[str] = []
     for group in data.get("ad_groups", []):
@@ -84,9 +92,12 @@ def find_claim_violations(data: dict, export_dir: Path) -> list[str]:
             violations.append(f"{name}: page not found in the export: {page_path}")
             continue
         text = visible_text(page_path.read_text(encoding="utf-8"))
-        for claim in group_claims(group):
-            if claim not in text:
-                violations.append(f"{name}: claim '{claim}' not found on {page_path}")
+        for ad_name, ad in _ads(group):
+            violations += [
+                f"{ad_name}: claim '{claim}' not found on {page_path}"
+                for claim in group_claims(ad)
+                if claim not in text
+            ]
     return violations
 
 

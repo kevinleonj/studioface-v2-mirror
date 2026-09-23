@@ -35,6 +35,7 @@ from app.core import (
     preview_token,
     verify_stripe_signature,
 )
+from app.found_us import register as register_found_us
 from app.guards import (
     STYLES,
     WARDROBES,
@@ -337,6 +338,7 @@ def make_app(
     _register_recovery(app, d)
     _register_thanks(app, d)
     _register_public(app, d)
+    register_found_us(app, d.pipeline.store, d.pipeline.secret)
     _register_internal(app, d)
     _register_budget(app, d)
     if static_dir and os.path.isdir(static_dir):

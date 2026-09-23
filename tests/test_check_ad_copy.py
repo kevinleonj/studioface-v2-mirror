@@ -161,3 +161,56 @@ def test_cli_exits_1_on_a_31_character_headline():
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-v"]))
+
+
+# ------------------------------------------------ task 95j: a second ad in an ad group
+
+RSA_JSON = ROOT / "docs" / "ads" / "rsa.json"
+CV_B_NEW_HEADLINES = [
+    "Foto CV profesional con IA",
+    "Foto para currículum con IA",
+    "Foto de currículum: 19,99 €",
+]
+CV_B_DESCRIPTIONS = [
+    "Sube de 1 a 4 selfies y recibe cuatro retratos listos para tu currículum.",
+    "Luz, fondo y ropa de estudio. Tu cara no cambia.",
+    "Tus selfies se borran a los 7 días. Sin registro y pago único.",
+]
+
+
+def _extra(**overrides) -> dict:
+    base = {
+        "name": "cv-b",
+        "path": ["foto-cv", "gratis"],
+        "headlines": ["Foto CV profesional con IA"],
+        "descriptions": ["Luz, fondo y ropa de estudio. Tu cara no cambia."],
+    }
+    base.update(overrides)
+    return base
+
+
+def test_an_additional_ad_over_the_headline_limit_is_refused():
+    too_many = [f"Titular numero {i}" for i in range(16)]
+    data = {"ad_groups": [_group(additional_ads=[_extra(headlines=too_many)])]}
+    assert "cv/cv-b/headlines: 16 items, limit 15" in find_violations(data)
+
+
+def test_an_additional_ad_with_a_duplicate_headline_is_refused():
+    twice = ["Foto CV profesional con IA", "Foto CV profesional con IA"]
+    data = {"ad_groups": [_group(additional_ads=[_extra(headlines=twice)])]}
+    assert "cv/cv-b/headlines: duplicate entries" in find_violations(data)
+
+
+def test_a_clean_additional_ad_passes():
+    assert find_violations({"ad_groups": [_group(additional_ads=[_extra()])]}) == []
+
+
+def test_the_real_cv_group_carries_cv_b_as_specified():
+    data = json.loads(RSA_JSON.read_text(encoding="utf-8"))
+    cv = next(g for g in data["ad_groups"] if g["name"] == "cv")
+    (ad,) = cv["additional_ads"]
+    assert ad["name"] == "cv-b"
+    assert ad["path"] == ["foto-cv", "gratis"]
+    assert ad["headlines"] == cv["headlines"] + CV_B_NEW_HEADLINES
+    assert ad["descriptions"] == CV_B_DESCRIPTIONS
+    assert "final_url" not in ad, "cv-b uses its group's final_url, /foto-cv/"

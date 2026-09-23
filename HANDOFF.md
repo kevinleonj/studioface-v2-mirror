@@ -5819,3 +5819,103 @@ the build test when `MIRROR.txt` exists, so the pin stays at 21; or (b) mark bot
 the files that are `100755` here) instead of skipping; add `git config core.hooksPath
 .githooks` to RUN-ME-FIRST so that test runs in the mirror instead of skipping; update
 the stale #4 reference in `verify_production.py`.
+
+## 2026-09-23 (Claude Code) — tasks 95a, 95f-95k done; 95c blocked; 95b/95d/95e next
+
+**95a, sitemap dates.** `<lastmod>` comes from `frontend/src/content/page-dates.ts`, seeded
+from each page's last content commit, never from the build time. Always on: no clock in
+`sitemap.ts` (meta-test: a `new Date()` fixture fails it), every built lastmod equals the
+config. Gated (`SITEMAP_TWO_BUILDS=1`, about 3 min): two real builds 61 s apart are
+byte-identical, and with `new Date()` put back they differ. Run for 95a: 2 passed.
+Deploy `35845635419`. Change a page's words, change its date there, in the same commit.
+
+**95c, blocked, not built.** Under `output: "export"` an empty `generateStaticParams`
+fails the build (`docs/verified.md` 248-249, Next.js error page and the v16.3.5 source),
+so /blog/[slug] cannot ship with zero posts without a fake post. Kevin decides: land the
+`[slug]` route in the same commit as the first real post, or wait until a post exists.
+
+**95f, privacy.** The Cloudflare entry names its second role: a "responsable del
+tratamiento" for Turnstile signals it uses to improve its bot detection, linking the
+Turnstile Privacy Addendum. It is not "independent": the addendum never uses that word
+(0 matches in its raw HTML), and a test forbids adding it. "Última actualización" reads
+23 de septiembre de 2026. The pinned outside-section hash changed only by that date
+line, proven by recomputing the old file with only that line swapped. Deploy
+`35849903547`.
+
+**95g.** `deploy.yml` runs `check_gallery_privacy.py` against the public hostname right
+after `verify_production.py`. Red fails the deploy: no continue-on-error, no `if`. First
+run logged GREEN (deploy `35847424160`).
+
+**95h.** The BLOCKED preview line says "human step: phone preview test", not closed issue
+#4 (deploy `35851073858`).
+
+**95i, task 94 landed with option (b).** Pin is 27, not 23. The reviewer's 21, plus the
+2 self-referential tests in `tests/test_mirror_suite.py`, plus the 4 tests 95g added in
+`tests/test_deploy_gallery_privacy.py`, which read `deploy.yml` (found by a diagnostic
+mirror run before the official check). `check_mirror_suite.py`, first attempt: mirror
+852 passed, 0 failed; private 1070 passed, no skip mentions the mirror. Public mirror
+`f8afcc9`. A fresh clone per RUN-ME-FIRST gives 852 passed, 249 skipped, 0 failed, and 0
+owner-address hits. The build now drops `.github/` itself; no hand deletion.
+
+**95j.** `rsa.json` cv group gains `additional_ads: [cv-b]`: 15 headlines, 3 descriptions,
+path foto-cv/gratis, group's final URL. Both checkers validate additional ads; both exit
+0. Not created in Google Ads; that happens after merge.
+
+**95k.** CAMPAIGN.md's by-hand build sheet is replaced by "Live account state" (id
+24285475822, PAUSED, 41 negatives, the 4 sitelinks, the 4 callouts, and the rest).
+`rsa.json` gains "gratis" and the live bidding value. The kill rule section is pinned
+by sha256. The conversion goal isn't in the live record, so the file says to check it
+in the account.
+
+**Process note:** after `git merge --ff-only`, rebuild `frontend/` before pushing. The
+fast-forward rewrites source files with new timestamps, and the pre-push gate refuses a
+"stale export". It refused twice today for exactly that.
+
+## 2026-09-23 (Claude Code) — tasks 95b, 95d, 95e done
+
+**95b, IndexNow** (deploy `35858819876`; first submission in `35861224537`).
+- **Key and file:** the key lives in `frontend/src/content/indexnow.json`; it is public
+  by design. `frontend/scripts/write-indexnow-key.mjs` runs as npm `prebuild`, including
+  inside the Docker build, and writes `public/<key>.txt`, which is gitignored.
+- **deploy.yml:** captures the live sitemap before the Cloud Run deploy step. After
+  verification and the gallery privacy check, it submits only the URLs whose lastmod
+  changed (`scripts/sitemap_changes.py`), with `continue-on-error`.
+- **`verify_production.py`** checks the key file from outside: 200, body is the key.
+- **`scripts/indexnow_submit.py`** is Kevin's text. It differs only by ruff's required
+  changes: the one-line import split into five sorted ones, one statement per line, and
+  one docstring line break. Proven by diffing the unparsed ASTs; no complexity finding.
+- **First real submission:** `IndexNow 202 for 3 URL(s)` (`/`, `/legal/terminos/`,
+  `/sobre-nosotros/`). IndexNow's documentation reads 202 as "key validation pending".
+- **gitleaks:** it flagged the public key and a test's fake key in history. Both are
+  fingerprinted in `.gitleaksignore` with reasons.
+
+**95d, /sobre-nosotros/** (deploy `35861224537`).
+- **Content:** Kevin, Madrid; limeralda, NIF Z3714124-C, Maria de Molina 31, Madrid;
+  hola@studioface.app. Only facts the legal pages already publish; a test refuses
+  invented claims.
+- **Canonical and JSON-LD:** canonical with trailing slash. Organization `logo`
+  (apple-icon.png, 200 live) here, on home and on términos, not on the frozen ad
+  component. No `sameAs`: no public profile exists yet.
+- **Links:** foot of home and términos "Contacto"; not the footer, which renders on
+  /foto-cv/.
+
+**95e, "¿Cómo nos encontraste?"** (deploy `35863483072`).
+- **Route:** `POST /api/orders/{id}/found-us`, gallery key compared as bytes. 404 for a
+  wrong key or no order; 409 until delivered; 422 for an answer outside the 8.
+- **Storage:** a single-field Firestore `update`. What `update` does on a missing
+  document is not confirmed by Google, so it is only ever called after the order is read.
+- **Gallery and report:** the gallery shows it only in the delivered block, with 44px
+  buttons. `funnel_report.py` prints the counts, via `scripts/found_us_report.py`
+  because the report file is at 294 of 300 lines.
+- **Caught before merge:** the morning command crashed with `No module named 'scripts'`.
+  Fixed, and a test now runs it as a script.
+
+**Follow-ups:**
+- **95c:** the `[slug]` route lands with the first real post (see the entry above).
+- **Mirror:** refresh the public mirror; it is at `f8afcc9`, before 95j/95k/95b/95d/95e.
+  The pin is now 29.
+- **Privacy page:** it doesn't mention the optional found-us answer. It is optional,
+  first-party and tied to the order, so decide whether "Qué datos tratamos" should say
+  so. Any edit there must re-pin the hash in `tests/test_privacy_transfers.py`.
+- **Organization JSON-LD:** it is still three copies. Share one after 2 Oct, when the ad
+  pages unfreeze.

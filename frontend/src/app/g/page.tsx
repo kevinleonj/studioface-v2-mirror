@@ -22,6 +22,7 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { FoundUs } from "@/components/found-us";
 import { buttonVariants } from "@/components/ui/button";
 import { EVENTS, track } from "@/lib/track";
 
@@ -58,6 +59,8 @@ export default function GalleryPage() {
   // older response shape still renders a working link.
   const [downloads, setDownloads] = useState<string[]>([]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Task 95e. The order and its key, kept for the one question asked after delivery.
+  const [link, setLink] = useState<{ order: string; token: string } | null>(null);
   // When this gallery was first opened, so a 404 can be told from "too early" (see
   // NOTFOUND_GRACE_MS) without the server having to lie about whether the order exists.
   const startedAt = useRef(Date.now());
@@ -160,6 +163,7 @@ export default function GalleryPage() {
       setStatus("notfound");
       return;
     }
+    setLink({ order, token });
     poll(order, token);
     return () => {
       if (timer.current) clearTimeout(timer.current);
@@ -232,6 +236,7 @@ export default function GalleryPage() {
             Estas imágenes están generadas con inteligencia artificial a partir
             de tus fotos.
           </p>
+          {link ? <FoundUs order={link.order} token={link.token} /> : null}
         </>
       ) : null}
 

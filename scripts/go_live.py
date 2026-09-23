@@ -201,7 +201,9 @@ def check_export() -> list[Check]:
     return [
         Check(OK, "frontend built", "frontend/out/index.html present"),
         Check(
-            OK if "Z3714124-C" in html else NO,
+            # Task 96a: the registered name as well as the NIF. The NIF alone passed
+            # under the wrong name (limeralda) for a week.
+            OK if "Z3714124-C" in html and "Kevin Daniel León Jouvin" in html else NO,
             "trader identity on the landing page",
             "LSSI-CE Art. 10",
         ),

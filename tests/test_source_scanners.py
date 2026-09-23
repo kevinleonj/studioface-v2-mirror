@@ -219,6 +219,10 @@ def test_tests_that_scan_product_source_strip_comments_first():
         # comments to strip - the word "scripts" and a read_text in the same file is what
         # trips the heuristic.
         "test_morning_capture.py",
+        # Task 95b. Reads data, not code: the key in frontend/src/content/indexnow.json,
+        # package.json's scripts, one built export file and deploy.yml. No pattern here
+        # could match a comment's prose.
+        "test_indexnow.py",
     }
     sources = re.compile(r'"(?:app|scripts|frontend)"|/\s*"src"|"(?:tsx|py)"')
     offenders = []

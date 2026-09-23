@@ -24,9 +24,9 @@ ROOT = Path(__file__).resolve().parents[1]
 EXPORT = ROOT / "frontend" / "out"
 LEGAL_SRC = ROOT / "frontend" / "src" / "app" / "legal"
 
-NAME = "limeralda"
+NAME = "Kevin Daniel León Jouvin"
 TAX_ID = "Z3714124-C"
-ADDRESS = "Maria de Molina 31"
+ADDRESS = "Calle de Diego de León 13, 7º A, 28006 Madrid"
 
 PAGES = ("aviso-legal", "privacidad", "terminos")
 

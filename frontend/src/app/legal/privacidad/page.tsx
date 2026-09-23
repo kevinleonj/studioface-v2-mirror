@@ -11,12 +11,19 @@ export default function Page() {
       </p>
       <H2>Responsable</H2>
       <p>
-        limeralda, NIF Z3714124-C, con domicilio en Maria de Molina 31, Madrid. Contacto: hola@studioface.app.
+        Titular: Kevin Daniel León Jouvin. NIF: Z3714124-C. Domicilio: Calle de Diego de León
+        13, 7º A, 28006 Madrid. Contacto: hola@studioface.app.
       </p>
       <H2>Qué datos tratamos</H2>
       <p>
         Las fotografías que subes, tu dirección de correo electrónico y los datos del pago. El pago
         lo procesa Stripe: no vemos ni guardamos el número de tu tarjeta.
+      </p>
+      <p>
+        Si quieres, al recibir tus fotos puedes decirnos cómo nos encontraste, eligiendo una de
+        las opciones que te mostramos. Lo guardamos junto a tu pedido para saber qué canales nos
+        traen clientes. Es opcional: la base jurídica es tu consentimiento, y no responder no
+        cambia nada. Se conserva el mismo tiempo que el pedido.
       </p>
       <H2>Para qué</H2>
       <p>

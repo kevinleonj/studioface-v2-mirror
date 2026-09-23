@@ -23,8 +23,10 @@ export function SiteFooter() {
           <p className="font-[family-name:var(--font-newsreader)] text-lg text-[color:var(--foreground)]">
             StudioFace
           </p>
-          <p className="mt-[var(--s1)] text-sm">limeralda, NIF Z3714124-C</p>
-          <p className="text-sm">Maria de Molina 31, Madrid</p>
+          <p className="mt-[var(--s1)] text-sm">
+            Titular: Kevin Daniel León Jouvin. NIF: Z3714124-C. Domicilio: Calle de Diego de León
+            13, 7º A, 28006 Madrid.
+          </p>
         </div>
         <nav className="flex flex-wrap gap-x-[var(--s3)] gap-y-[var(--s1)]">
           {LINKS.map((link) => (

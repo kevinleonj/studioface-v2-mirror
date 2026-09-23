@@ -45,6 +45,15 @@ class FakeDocumentRef:
     def set(self, data: dict) -> None:
         self._store[self._path] = copy.deepcopy(data)
 
+    def update(self, data: dict) -> None:
+        """Merges the given fields into an EXISTING document. Refuses a missing one: the
+        only caller (FirestoreOrderStore.set_found_us) runs after reading the order, and
+        what real Firestore does on a missing document is not confirmed, so the fake
+        must not quietly create one."""
+        if self._path not in self._store:
+            raise KeyError(f"update() on a missing document: {self._path}")
+        self._store[self._path].update(copy.deepcopy(data))
+
     def create(self, data: dict) -> None:
         if self._path in self._store:
             raise AlreadyExists(self._path)
