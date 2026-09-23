@@ -50,6 +50,7 @@ Usage:
     python scripts/funnel_report.py                  # last 7 UTC days
     python scripts/funnel_report.py --days 14
     python scripts/funnel_report.py --start 2026-09-15 --end 2026-09-21
+    python scripts/funnel_report.py --since 2026-09-23  # + the step 1 kill-rule verdict
 """
 
 from __future__ import annotations
@@ -197,11 +198,56 @@ def format_report(rows: list[DayCounts], stored_batches: int) -> str:
     return "\n".join(lines)
 
 
+# docs/ads/CAMPAIGN.md, "Pre-registered test" (task 92). Clicks and spend live in Google
+# Ads, which a server-side script cannot read, so the verdict line says so and computes
+# the rest: the click ceiling the previews can cover and the spend ceiling the paid
+# orders allow.
+STEP1_DAYS = 14
+STEP1_MIN_CLICKS = 25
+CLICKS_PER_PREVIEW = 10  # kill if previews are FEWER than 1 in 10 clicks
+MAX_EUR_PER_PAID_ORDER = 20
+
+
+def step1_state(previews: int, paid: int, day: int) -> str:
+    """What our own numbers decide about step 1 on its `day` (1 = the --since day).
+
+    Step 1 ends after 14 days or 50 EUR, whichever first, and the spend is only in
+    Google Ads, so before day 14 a kill reads "if step 1 ended today"."""
+    if day < 1:
+        return "NOT STARTED: --since is after today"
+    kill = "KILL" if day >= STEP1_DAYS else "KILL IF STEP 1 ENDED TODAY"
+    max_clicks = previews * CLICKS_PER_PREVIEW
+    if paid == 0:
+        return f"{kill}: zero paid orders"
+    if max_clicks < STEP1_MIN_CLICKS:
+        return (
+            f"{kill}: {previews} previews cover at most {max_clicks} clicks, "
+            f"under the {STEP1_MIN_CLICKS} the rule needs"
+        )
+    return (
+        f"CONTINUE ONLY IF Google Ads shows {STEP1_MIN_CLICKS} to {max_clicks} clicks "
+        f"and spend under {paid * MAX_EUR_PER_PAID_ORDER} EUR"
+    )
+
+
+def step1_line(db, since_day: int, today: int) -> str:
+    total = _totals(build_report(db, since_day, today))
+    day = today - since_day + 1
+    return (
+        f"STEP 1 VERDICT: {step1_state(total.previews, total.orders_paid, day)} | "
+        f"day {day} of {STEP1_DAYS} since {day_label(since_day)} (or 50 EUR spent, "
+        "whichever first) | clicks: read in Google Ads | spend: read in Google Ads | "
+        f"previews started: {total.previews} | paid orders: {total.orders_paid}"
+    )
+
+
 def _parse_day(value: str) -> int:
     return day_int(datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=UTC).timestamp())
 
 
 def _resolve_range(args: argparse.Namespace) -> tuple[int, int]:
+    if args.since:
+        return _parse_day(args.since), day_int(time.time())
     if args.start:
         start_day = _parse_day(args.start)
         end_day = _parse_day(args.end) if args.end else day_int(time.time())
@@ -209,12 +255,20 @@ def _resolve_range(args: argparse.Namespace) -> tuple[int, int]:
     return default_range(days=args.days)
 
 
-def main(argv: list[str]) -> int:
+def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Print the ad-test kill-rule funnel numbers.")
     parser.add_argument("--days", type=int, default=7, help="last N UTC days (default 7)")
-    parser.add_argument("--start", help="YYYY-MM-DD UTC, overrides --days")
+    when = parser.add_mutually_exclusive_group()
+    when.add_argument("--start", help="YYYY-MM-DD UTC, overrides --days")
+    when.add_argument(
+        "--since", help="YYYY-MM-DD UTC the ad test began: report to today + step 1 verdict"
+    )
     parser.add_argument("--end", help="YYYY-MM-DD UTC, defaults to today (with --start)")
-    args = parser.parse_args(argv[1:])
+    return parser.parse_args(argv[1:])
+
+
+def main(argv: list[str]) -> int:
+    args = parse_args(argv)
     start_day, end_day = _resolve_range(args)
 
     from google.cloud import firestore
@@ -223,6 +277,9 @@ def main(argv: list[str]) -> int:
     db = firestore.Client(project=PROJECT)
     rows = build_report(db, start_day, end_day)
     print(format_report(rows, stored_batches_total(db)))
+    if args.since:
+        print()
+        print(step1_line(db, start_day, end_day))
     return 0
 
 

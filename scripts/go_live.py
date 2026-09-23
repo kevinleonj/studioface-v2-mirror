@@ -42,6 +42,8 @@ TIMEOUT_S = 30
 CURRENT_LIVE_PRODUCT = "prod_VISvkPEoVJ3lPM"
 
 OK, NO, UNKNOWN = "ok", "NO", "??"
+# Listed, never blocking: an issue the 'after launch' label kept out of the verdict.
+PARKED = "--"
 
 
 @dataclass
@@ -206,9 +208,33 @@ def check_export() -> list[Check]:
     ]
 
 
+AFTER_LAUNCH = "after launch"
+
+
+def _parked(row: dict) -> bool:
+    """True when someone decided this issue does not have to be true before an ad runs.
+
+    The label is the record of that decision, so it is read rather than re-argued here.
+    Fails CLOSED: a row with no `labels` field at all - a gh output shape change, say -
+    counts as unlabelled and keeps blocking, because waving issues through on a parsing
+    accident is the one failure this check must not have.
+    """
+    return any(label.get("name") == AFTER_LAUNCH for label in row.get("labels") or [])
+
+
 def check_blocking_issues() -> list[Check]:
     code, out = sh(
-        ["gh", "issue", "list", "--state", "open", "--json", "number,title", "--limit", "50"]
+        [
+            "gh",
+            "issue",
+            "list",
+            "--state",
+            "open",
+            "--json",
+            "number,title,labels",
+            "--limit",
+            "50",
+        ]
     )
     if code != 0:
         return [Check(UNKNOWN, "no blocking issues", out[:70])]
@@ -216,13 +242,24 @@ def check_blocking_issues() -> list[Check]:
         rows = json.loads(out)
     except json.JSONDecodeError:
         return [Check(UNKNOWN, "no blocking issues", out[:70])]
-    blocking = [f"#{r['number']}" for r in rows if "go live" not in r["title"].lower()]
+    blocking = [
+        f"#{r['number']}" for r in rows if "go live" not in r["title"].lower() and not _parked(r)
+    ]
+    # Task 91: the label decides what blocks a launch, and a label added by habit rather
+    # than by decision would otherwise vanish from every run. Each one is printed, number
+    # and title, so it is re-read every time the preflight is.
+    parked = [
+        Check(PARKED, "parked 'after launch', not blocking", f"#{r['number']} {r['title']}")
+        for r in rows
+        if _parked(r)
+    ]
     return [
         Check(
             OK if not blocking else NO,
             "no open needs-Kevin issues",
             ", ".join(blocking) or "none",
-        )
+        ),
+        *parked,
     ]
 
 
@@ -276,6 +313,11 @@ def verdict(results: list[Check]) -> int:
         print(f"GO-LIVE PREFLIGHT: BLOCKED, {len(unknown)} check(s) could not be answered")
     else:
         print("GO-LIVE PREFLIGHT: READY. Every precondition holds; the steps are still yours.")
+        # On READY only: that is the verdict a parked issue can have changed, and the
+        # verdict line is the one people read.
+        parked = [c for c in results if c.mark == PARKED]
+        if parked:
+            print(f"  {len(parked)} issue(s) parked 'after launch', listed above. Re-read them.")
         return 0
     for c in blocked + unknown:
         print(f"  - {c.name}: {c.detail}")

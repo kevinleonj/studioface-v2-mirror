@@ -5614,3 +5614,138 @@ writes to a local target directory.
 `task/74-mirror-redacts-owner` only. The orchestrator merges, pushes `origin main`,
 refreshes the public mirror, clones it to `..\studioface-v2-mirror-check`, and runs
 the check above.
+
+## 2026-09-23 (Claude Code) — task 75: the walk's harness, and the close of the pre-ads brief
+
+**What changed.** Task 73 added a Turnstile hostname check to `app/adapters/turnstile.py`.
+It is correct in production and stays. It made the local funnel walk impossible, and the
+docstring stated the reason it supposedly could not: that the walk "solves the real dummy
+widget at 127.0.0.1 and must verify against that host". Cloudflare disagrees. Measured
+today against their siteverify with the published dummy secret:
+
+    {"success": true, "hostname": "example.com", "metadata": {"result_with_testing_key": true}}
+
+The dummy secret reports that constant wherever the widget was really solved. So every
+`/api/preview` in the walk answered 403 `La comprobación de seguridad no ha pasado`, and
+the two red funnel tests were that 403, not a defect in the funnel.
+
+`tests/e2e/funnel_app.py` now derives the expected hostname from the secret in use
+(`expected_turnstile_hostname`). Test harness only — `app/entry.py` is untouched and still
+expects `hostname_of(PUBLIC_URL)`. Narrow by construction: the dummy secret accepts every
+token anyway, so trusting its hostname concedes nothing it had not already conceded.
+
+**Why production was never at risk, checked rather than assumed:** `PUBLIC_URL` is
+`https://studioface.app`, and `curl -I` shows `www.studioface.app` answers 301 to the
+apex, so the widget is only ever served on the one hostname the check expects.
+
+**Evidence.** Before: `2 failed, 4 passed, 2 skipped`, reproduced identically twice.
+After: `6 passed, 2 skipped in 22.66s`. `scripts/ci.py` green in 108s. Deploy run
+35790043722 green on all five jobs; Cloud Run `studioface-api-00191-9qt`. All 13
+`scripts/check.py` checks GREEN, `check_gallery_privacy.py` GREEN. Mirror refreshed to
+`5f69f31`; task 74's grep against a fresh clone of the *published* mirror exits 0.
+
+**A defect found in the monitor, not fixed, recorded here:** `scripts/morning.py` dies
+with `UnicodeEncodeError` on `→` whenever its output is redirected rather than shown in a
+terminal, because the console codec is cp1252. A monitor that cannot be captured is a
+monitor that is silent in a log. `PYTHONIOENCODING=utf-8` works around it; `-u` is also
+needed or the subprocess sections print under the wrong headings. Worth one commit.
+
+**Not changed:** colours, fonts, first-screen layout, consent logic, the GA4 id, the four
+delivery prompts, payment provider, hosting, price, permissions in Google Cloud, the
+free-preview limit. No new dependency. No Google Ads tag. No campaign.
+
+## 2026-09-23 (Claude Code) — tasks 80-84
+
+**80, the preflight matched reality.** `go_live.py --dry-run` said BLOCKED on #4, #6, #7,
+#9, #11 because it counted every open issue except the go-live one. #4 was already done —
+a real purchase at the live price and a refund on 21 September, order `cs_live_a1VF`, each
+log line once — so it is closed with that evidence. #6, #7, #9 and #11 are real and wanted
+and none has to be true before an ad runs, so each carries an `after launch` label and the
+preflight reads the label instead of re-arguing it. Fails closed: a row with no `labels`
+field at all counts as unlabelled and keeps blocking, so a change in gh's output shape can
+never wave an issue through. Verdict now: **READY**.
+
+**81, a bad body is 422, not 500.** `POST /api/checkout` and `POST /api/recuperar` went
+straight to `await request.json()`. Two ways for a stranger to get a 500: a body that will
+not parse, and a body that parses but is not an object, where `body.get` raises
+AttributeError — `[]`, `"x"`, `5`, `null`, `true` all did it. Both answer 422 `bad_body`.
+`{}` is let through on purpose: a missing field is the handler's judgement. Measured on
+production after deploy, six of six: `{"detail":"bad_body"}`. The other two
+`request.json()` calls are untouched deliberately — the Stripe webhook verifies the
+signature and `/internal/budget` verifies the Pub/Sub token *before* parsing, so neither
+is reachable by a stranger.
+
+**82, closed as already settled, not done.** The task asked to drop `killswitch` from
+`/health` to finish task 73. Task 73 did drop it and it was put back the same day, on
+purpose: `frontend/src/components/upload-form.tsx:437` reads exactly that field to show
+"Estamos sin capacidad ahora mismo" and hide the buy button. Dropping it does not leak
+money — `/api/preview` and `/api/checkout` still refuse with 503 — but a visitor would
+meet a normal-looking shop, pick photos and only learn the shop had stopped at the buy
+step. Asked and answered again on 23 September: leave `/health` as it is. The paused state
+is public by design, so hiding it there protects nothing and costs the honest warning.
+
+**83, the monitor survives being redirected.** Piped rather than shown in a terminal,
+Python encodes stdout with the console codec (cp1252 here) and `morning.py` died
+mid-report with `UnicodeEncodeError` on U+2192; separately, its own `print` output is
+block-buffered while its subprocesses write straight to the file descriptor, so the gh and
+gcloud sections appeared ABOVE the headings that introduce them. stdout is now utf-8
+whatever the console codec, and each heading flushes before the subprocess under it runs.
+The four arrows in `MORNING-REPORT.md` are ASCII now, but that is the smaller half: the
+report is regenerated with whatever characters the overnight run likes, so replacing an
+arrow fixes one report and reconfiguring stdout fixes the monitor. Test is hermetic — a
+copy of `scripts/` in a temp root with fake `gh` and `gcloud` ahead of the real ones on
+PATH, so it needs no network and no credentials.
+
+**84, already done by task 71, verified rather than assumed.** The in-process
+`_refund_alarmed` set is gone from `app/core.py`; whether a call is the one that emails is
+`Pipeline._alert_once`, backed by `Counter.increment_if_below(key, 1, 86400)` — the same
+atomic cross-instance counter the daily ceiling and the rate limiter use.
+`app/entry.py:390` wires the real `FirestoreCounter(db)`. The test task 84 asks for
+already exists with its refused twin, in `tests/test_daily_alerts.py`:
+`test_two_instances_racing_the_same_days_refund_alarm_still_page_kevin_once` builds two
+stores sharing one counter and asserts exactly one alarm. No duplicate file was created to
+make the stated check command resolve; the check should point at that file.
+
+**Not changed:** colours, fonts, first-screen layout, consent logic, the GA4 id, the four
+delivery prompts, payment provider, hosting, price, permissions in Google Cloud, the
+free-preview limit. No new dependency. No Google Ads tag. No campaign.
+
+## 2026-09-23 (Claude Code) — tasks 90-92
+
+**91, the 'after launch' label is visible in every dry run.** Task 80 let the label decide
+what blocks a launch; a label added by habit would then vanish. `go_live.py` now prints
+each parked issue, number and title, under its own mark `--` that never blocks, and the
+READY line adds `N issue(s) parked 'after launch', listed above. Re-read them.` It is on
+READY only because that is the verdict a parked issue can have changed. Task 80's tests
+unpacked exactly one check from `check_blocking_issues`; they now read the verdict check,
+which stays first. 7 new tests (empty, one, many, failure, never blocks, count on the
+READY line, an unlabelled issue never listed as parked). Live output after deploy:
+
+    -- parked 'after launch', not blocking: #11 needs Kevin: grant the CI token ...
+    -- parked 'after launch', not blocking: #9 needs Kevin: Docker Desktop ...
+    -- parked 'after launch', not blocking: #7 needs Kevin: Resend region ...
+    -- parked 'after launch', not blocking: #6 needs Kevin: 3 before/after pairs ...
+    GO-LIVE PREFLIGHT: READY. Every precondition holds; the steps are still yours.
+      4 issue(s) parked 'after launch', listed above. Re-read them.
+
+**92, one command each morning of the ad test:**
+`.venv\Scripts\python.exe scripts\funnel_report.py --since 2026-09-23`. `--since` reports
+from that day to today and ends with one `STEP 1 VERDICT:` line against the
+pre-registered rule in `docs/ads/CAMPAIGN.md`. Clicks and spend live in Google Ads, which
+a server-side script cannot read, so the line says "read in Google Ads" for both and
+computes what our numbers decide: zero paid orders kills; previews cap the clicks the
+rule accepts at 10 x previews, and if that is under 25 it kills whatever Google Ads
+shows; paid orders cap the spend that keeps cost per order under 20 EUR. Step 1 can end
+early at 50 EUR, which only Google Ads sees, so before day 14 a kill reads "if step 1
+ended today". `--since` and `--start` are mutually exclusive. Read-only against
+production (`.get()` and `.stream()` only). First real run, 23 September:
+
+    STEP 1 VERDICT: KILL IF STEP 1 ENDED TODAY: zero paid orders | day 1 of 14 since
+    2026-09-23 (or 50 EUR spent, whichever first) | clicks: read in Google Ads | spend:
+    read in Google Ads | previews started: 0 | paid orders: 0
+
+**90, mirror refresh:** done after this entry is pushed, so the mirror carries tasks
+80-92 and this write-up; the snapshot commit and the fresh-clone checks are in the
+session report.
+
+Gate green before each push; deploy `35820373286` green on all five jobs.

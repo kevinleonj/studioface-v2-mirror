@@ -44,7 +44,7 @@ refuses it:
 Identical symptom, different cause. Reading the docs and shipping would have replaced one
 silent outage with another.
 
-**Verified on production after deploy:** widget children 0 → 1, token field 0 → 1, and
+**Verified on production after deploy:** widget children 0 -> 1, token field 0 -> 1, and
 the widget reads *"Verifique que es un ser humano"*, correctly in Spanish.
 
 ---
@@ -107,7 +107,7 @@ is computed from the same string and cannot drift.
   now strips comments first, and two carry a test asserting the pattern can fail.
 - I wrote "not verified" about `fetchpriority` after reading the wrong row of the right
   source. Lighthouse pointed at it, I checked browser-compat-data properly, and it went
-  in — performance 96 → 98, blocking time 140ms → 60ms.
+  in — performance 96 -> 98, blocking time 140ms -> 60ms.
 - The Turnstile widget looked English on a Spanish page. Measuring said its default
   already follows the browser: a Spanish browser gets Spanish. **No change made.**
 

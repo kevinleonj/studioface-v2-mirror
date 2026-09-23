@@ -213,6 +213,12 @@ def test_tests_that_scan_product_source_strip_comments_first():
         # sitting in a comment is exactly as real as one sitting in code. Stripping
         # comments first would hide the failure this test exists to catch.
         "test_make_public_mirror.py",
+        # Task 83. Copies scripts/morning.py into a temp root and RUNS it; the only
+        # read_text is of MORNING-REPORT.md, a generated document, asserting it carries no
+        # U+2192. Nothing here searches product source for behaviour, so there are no
+        # comments to strip - the word "scripts" and a read_text in the same file is what
+        # trips the heuristic.
+        "test_morning_capture.py",
     }
     sources = re.compile(r'"(?:app|scripts|frontend)"|/\s*"src"|"(?:tsx|py)"')
     offenders = []

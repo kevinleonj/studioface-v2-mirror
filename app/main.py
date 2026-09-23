@@ -549,7 +549,7 @@ def _register_checkout(app: FastAPI, d: Deps) -> None:
             raise HTTPException(503, "paused")
         if d.create_checkout is None:
             raise HTTPException(503, "checkout_not_configured")
-        body = await request.json()
+        body = await _object_body(request)
         batch, count = str(body.get("batch", "")), int(body.get("n", 0))
         expected = preview_token(batch, count, d.pipeline.secret)
         if not batch or not hmac.compare_digest(expected, str(body.get("t", ""))):
@@ -580,10 +580,31 @@ def _register_checkout(app: FastAPI, d: Deps) -> None:
         return {"url": url}
 
 
+async def _object_body(request: Request) -> dict:
+    """The request body as a JSON object, or 422 bad_body.
+
+    A stranger controls these bytes exactly, so neither failure here is a server error.
+    `await request.json()` raises on a body that will not parse, and returns a list, a
+    string, a number or None for a body that parses but is not an object - `.get` then
+    raises AttributeError. Both used to leave as 500: an error page for something that is
+    not our error, and noise on top of the real 500s. Measured 22 Sep 2026, 23:40 UTC.
+
+    `{}` is an object and is let through on purpose: whether a field is missing is the
+    handler's judgement, not this one's.
+    """
+    try:
+        body = await request.json()
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        raise HTTPException(422, "bad_body") from None
+    if not isinstance(body, dict):
+        raise HTTPException(422, "bad_body")
+    return body
+
+
 def _register_recovery(app: FastAPI, d: Deps) -> None:
     @app.post("/api/recuperar")
     async def recuperar(request: Request, x_forwarded_for: str = Header(default="")):
-        body = await request.json()
+        body = await _object_body(request)
         email = str(body.get("email", "")).strip().lower()
         if "@" not in email or "." not in email.split("@")[-1]:
             raise HTTPException(422, "bad_email")
